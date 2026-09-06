@@ -3,7 +3,7 @@ from threading import Event
 
 import pytest
 
-from comfyui_plugin.client import ComfyImage, ComfyUICancelledError
+from comfyui_plugin.client import ComfyImage, ComfyUICancelledError, ComfyUIEvent, ComfyUIEventType
 
 from comfyui_plugin.generation import GenerationCoordinator, GenerationRequest, parse_lora_settings
 
@@ -21,6 +21,41 @@ class FakeClient:
 
 
 class TestGenerationCoordinator:
+    def test_reports_websocket_progress_events_without_replacing_rest_completion(self):
+        # Arrange
+        client = EventClient()
+        events = []
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        result = GenerationCoordinator(client).run(request, on_event=events.append)
+
+        # Assert
+        assert result.prompt_id == "job-1"
+        assert [event.event_type for event in events] == [
+            ComfyUIEventType.PROGRESS,
+            ComfyUIEventType.EXECUTED,
+        ]
+
+    def test_rest_completion_survives_websocket_setup_failure(self):
+        # Arrange
+        client = BrokenWebSocketClient()
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        result = GenerationCoordinator(client).run(request)
+
+        # Assert
+        assert result.prompt_id == "job-1"
+
     def test_runs_batch_sequentially_and_isolates_workflow_state(self):
         # Arrange
         client = FakeClient()
@@ -160,6 +195,45 @@ class BlockingClient(FakeClient):
     def interrupt(self):
         self.interrupted = True
         return {"ok": True}
+
+
+class EventClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.event_seen = threading.Event()
+
+    def open_websocket(self, **_kwargs):
+        return EventWebSocket(self.event_seen)
+
+    def wait_for_outputs(self, prompt_id, **_kwargs):
+        assert self.event_seen.wait(timeout=1)
+        return super().wait_for_outputs(prompt_id)
+
+
+class EventWebSocket:
+    def __init__(self, event_seen):
+        self.event_seen = event_seen
+        self.events = iter((
+            ComfyUIEvent(ComfyUIEventType.PROGRESS, "job-1", value=2, maximum=10),
+            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1"),
+        ))
+
+    def connect(self):
+        pass
+
+    def receive(self):
+        event = next(self.events)
+        if event.event_type == ComfyUIEventType.EXECUTED:
+            self.event_seen.set()
+        return event
+
+    def close(self):
+        pass
+
+
+class BrokenWebSocketClient(FakeClient):
+    def open_websocket(self, **_kwargs):
+        raise OSError("WebSocket unavailable")
 
 
 def _run_and_capture(coordinator, request):

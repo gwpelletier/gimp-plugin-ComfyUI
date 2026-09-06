@@ -140,7 +140,7 @@ Decision: retain the modal dialog for the first release. The existing procedure 
 - [x] Add fake WebSocket boundary tests or a local protocol adapter test.
 - [x] Add an opt-in live flow that verifies progress events and preview cleanup.
 
-Implementation status: standard-library WebSocket transport, typed event parsing, binary preview handling, unit coverage, and live connection coverage are complete. REST polling remains the default completion path.
+Implementation status: standard-library WebSocket transport, typed event parsing, binary preview handling, modal progress updates, REST fallback behavior, unit coverage, and live connection coverage are complete. REST polling remains the authoritative completion path.
 
 ### 9. Batch processing
 

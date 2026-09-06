@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Callable
 
 from .batch import BatchItem, BatchQueue, BatchSummary
-from .client import ComfyImage, ComfyUICancelledError, ComfyUIClient
+from .client import (
+    ComfyImage,
+    ComfyUICancelledError,
+    ComfyUIClient,
+    ComfyUIEvent,
+    ComfyUIEventType,
+)
 from .workflow import apply_generation_parameters
 
 
@@ -108,6 +114,7 @@ class GenerationCoordinator:
         request: GenerationRequest,
         *,
         on_progress: Callable[[int, int], None] | None = None,
+        on_event: Callable[[ComfyUIEvent], None] | None = None,
         cancellation_event: threading.Event | None = None,
     ) -> GenerationResult:
         """Prepare, queue, wait for, and return one generation result."""
@@ -115,7 +122,7 @@ class GenerationCoordinator:
         with self._state_lock:
             self._cancellation_events.add(cancellation_event)
         try:
-            return self._run(request, on_progress, cancellation_event)
+            return self._run(request, on_progress, on_event, cancellation_event)
         finally:
             with self._state_lock:
                 self._cancellation_events.discard(cancellation_event)
@@ -142,6 +149,7 @@ class GenerationCoordinator:
         self,
         request: GenerationRequest,
         on_progress: Callable[[int, int], None] | None,
+        on_event: Callable[[ComfyUIEvent], None] | None,
         cancellation_event: threading.Event,
     ) -> GenerationResult:
         if cancellation_event.is_set():
@@ -168,11 +176,16 @@ class GenerationCoordinator:
         prompt_id = self.client.queue_prompt(workflow)
         with self._state_lock:
             self._active_prompt_ids.add(prompt_id)
+        observer_stop = threading.Event()
+        observer = self._start_websocket_observer(prompt_id, observer_stop, on_progress, on_event)
         try:
             images = self.client.wait_for_outputs(prompt_id, cancellation_event=cancellation_event)
         except ComfyUICancelledError as error:
             raise GenerationCancelledError(str(error)) from error
         finally:
+            observer_stop.set()
+            if observer is not None:
+                observer.join(timeout=1)
             with self._state_lock:
                 self._active_prompt_ids.discard(prompt_id)
         if cancellation_event.is_set():
@@ -180,3 +193,45 @@ class GenerationCoordinator:
         if on_progress:
             on_progress(1, 1)
         return GenerationResult(prompt_id, seed, images)
+
+    def _start_websocket_observer(
+        self,
+        prompt_id: str,
+        stop_event: threading.Event,
+        on_progress: Callable[[int, int], None] | None,
+        on_event: Callable[[ComfyUIEvent], None] | None,
+    ) -> threading.Thread | None:
+        open_websocket = getattr(self.client, "open_websocket", None)
+        if open_websocket is None:
+            return None
+
+        def observe() -> None:
+            websocket = None
+            try:
+                websocket = open_websocket(timeout=2)
+                websocket.connect()
+                while not stop_event.is_set():
+                    event = websocket.receive()
+                    if event is None or not isinstance(event, ComfyUIEvent):
+                        continue
+                    if event.prompt_id not in {None, prompt_id}:
+                        continue
+                    if on_event is not None:
+                        on_event(event)
+                    if event.event_type == ComfyUIEventType.PROGRESS and on_progress is not None:
+                        on_progress(event.value or 0, event.maximum or 0)
+                    if event.event_type in {
+                        ComfyUIEventType.EXECUTED,
+                        ComfyUIEventType.EXECUTION_ERROR,
+                    }:
+                        break
+            except Exception:
+                # REST history remains authoritative when WebSocket is unavailable.
+                return
+            finally:
+                if websocket is not None:
+                    websocket.close()
+
+        observer = threading.Thread(target=observe, daemon=True)
+        observer.start()
+        return observer

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from comfyui_plugin.client import ComfyUIClient
+from comfyui_plugin.client import ComfyUIClient, ComfyUIEventType
 from comfyui_plugin.generation import GenerationCoordinator, GenerationRequest
 from comfyui_plugin.workflow import load_workflow
 
@@ -41,10 +41,16 @@ class TestComfyUIGenerationFlow:
         )
 
         # Act
-        result = GenerationCoordinator(client).run(request)
+        events = []
+        result = GenerationCoordinator(client).run(request, on_event=events.append)
         output_bytes = client.view_image(result.images[0])
 
         # Assert
         assert result.prompt_id
         assert result.images
         assert output_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        assert any(event.event_type in {
+            ComfyUIEventType.PROGRESS,
+            ComfyUIEventType.EXECUTING,
+            ComfyUIEventType.EXECUTED,
+        } for event in events)

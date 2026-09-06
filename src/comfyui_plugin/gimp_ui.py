@@ -13,6 +13,7 @@ gi.require_version("GimpUi", "3.0")
 from gi.repository import Gimp, GimpUi, GLib, Gtk
 
 from .client import ComfyUIClient
+from .client import ComfyUIEvent, ComfyUIEventType
 from .generation import GenerationCoordinator, GenerationRequest
 from .gimp_image import GimpImageOperations
 from .export import ExportError, ImageExporter
@@ -373,6 +374,22 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.status.set_text(message)
         return False
 
+    def _on_generation_event(self, event: ComfyUIEvent) -> None:
+        """Translate background ComfyUI events into GTK-safe status updates."""
+        if event.event_type == ComfyUIEventType.PROGRESS:
+            value = event.value or 0
+            maximum = event.maximum or 0
+            message = f"Generating: step {value}/{maximum}" if maximum else "Generating..."
+        elif event.event_type == ComfyUIEventType.EXECUTING:
+            message = f"Executing node {event.node_id}" if event.node_id else "Executing..."
+        elif event.event_type == ComfyUIEventType.EXECUTION_ERROR:
+            message = "ComfyUI reported an execution error; checking result status..."
+        elif event.event_type == ComfyUIEventType.STATUS:
+            message = "ComfyUI connected; waiting for progress..."
+        else:
+            return
+        self._set_worker_status(message)
+
     @staticmethod
     def _add_spin(grid: Gtk.Grid, row: int, label_text: str, value: float, lower: float, upper: float, step: float):
         label = Gtk.Label(label=label_text, xalign=0)
@@ -490,7 +507,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     scheduler=settings["scheduler"],
                     denoise=settings["denoise"],
                     loras=settings["loras"],
-                )
+                ),
+                on_event=self._on_generation_event,
             )
             if not result.images:
                 raise RuntimeError("ComfyUI completed without an image output")
