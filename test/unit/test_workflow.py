@@ -82,6 +82,28 @@ class TestValidateWorkflowCompatibility:
         assert resolved["2"]["inputs"]["clip_name2"] == "flux/t5xxl_fp8_e4m3fn.safetensors"
         assert all("{{" not in str(value) for node in resolved.values() for value in node["inputs"].values())
 
+    def test_resolves_krea2_turbo_loader_resources(self):
+        # Arrange
+        workflow = {
+            "1": {
+                "class_type": "UNETLoader",
+                "inputs": {"unet_name": "old-diffusion.safetensors"},
+            },
+            "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "old-clip.safetensors", "type": "krea2"}},
+        }
+
+        # Act
+        resolved = apply_generation_parameters(
+            workflow,
+            diffusion_model="krea2-turbo.safetensors",
+            krea_clip="krea2-text-encoder.safetensors",
+        )
+
+        # Assert
+        assert resolved["1"]["inputs"]["unet_name"] == "krea2-turbo.safetensors"
+        assert resolved["2"]["inputs"]["clip_name"] == "krea2-text-encoder.safetensors"
+        assert workflow["1"]["inputs"]["unet_name"] == "old-diffusion.safetensors"
+
 
 class TestApplyParameters:
     def test_apply_parameters_replaces_markers_without_mutating_template(self):

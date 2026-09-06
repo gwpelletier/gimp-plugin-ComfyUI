@@ -7,8 +7,8 @@ The generation dialog exposes a checkpoint profile selector beside the checkpoin
 
 The dialog also exposes a top-level generation mode:
 
-- `Image Edit` shows the SDXL and Flux image-edit workflows.
-- `Inpainting` shows the SDXL and Flux inpainting workflows and requires a painted GIMP selection.
+- `Image Edit` shows the SDXL, SD 1.5, and Flux image-edit workflows.
+- `Inpainting` shows the SDXL, SD 1.5, and Flux inpainting workflows and requires a painted GIMP selection.
 
 Workflow signals have higher confidence than filenames. Flux workflows are identified by nodes such as `UNETLoader` or `DualCLIPLoader`; SDXL workflows are identified by SDXL conditioning nodes. Names containing family hints such as `flux`, `sdxl`, or `sd15` are treated as medium-confidence suggestions only.
 
@@ -19,8 +19,18 @@ ComfyUI's standard `/object_info` response advertises checkpoint names but does 
 The bundled workflow families are:
 
 - SDXL graphs: `sdxl-image-edit-api.json` and `sdxl-inpainting-api.json`.
+- SD 1.5 graphs: `sd15-image-edit-api.json` and `sd15-inpainting-api.json`.
 - Flux graphs: `flux-image-edit-api.json` and `flux-inpainting-api.json`.
 
-Krea2 is available from the live instance through the `Krea2ImageNode` custom node. It is a hosted text-to-image service with dynamic models such as Krea 2 Medium, Medium Turbo, and Large, rather than a local checkpoint workflow. It requires ComfyUI-side credentials and does not currently support the plug-in's image-edit or mask contract, so it is intentionally not bundled in the image-edit/eraser registry.
+Krea2-Turbo is a local diffusion workflow using a diffusion model loader, a
+`CLIPLoader` with `type: "krea2"`, and a VAE loader. The bundled
+`krea2-turbo-text-to-image-api.json` workflow uses zeroed negative conditioning,
+so the dialog hides Negative prompt for this family. The workflow is available
+in Image Edit mode; an inpainting graph should be added only after the local
+Krea2 model's reference-image or mask contract is verified.
 
-Flux profiles require `UNETLoader` and `DualCLIPLoader`; SDXL profiles require `CLIPTextEncodeSDXL`. The dialog rejects a family/workflow mismatch before queueing.
+Flux profiles require `UNETLoader` and `DualCLIPLoader`; SDXL profiles require
+`CLIPTextEncodeSDXL`; SD 1.5 profiles require `CheckpointLoaderSimple` and
+`CLIPTextEncode`. These families share the checkpoint, VAE, sampler, and
+conditioning graph shape, but their text-conditioning contracts are different.
+The dialog rejects a family/workflow mismatch before queueing.

@@ -141,6 +141,35 @@ class TestComfyUIClient:
         # Assert
         assert models == ["Krea 2 Medium", "Krea 2 Large"]
 
+    def test_reads_requested_flux_clip_input(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        requested_inputs = []
+
+        def get_options(node_class, input_name):
+            requested_inputs.append((node_class, input_name))
+            return [input_name]
+
+        monkeypatch.setattr(client, "get_node_input_options", get_options)
+
+        # Act
+        clip_t5 = client.get_available_clip_models("clip_name2")
+
+        # Assert
+        assert clip_t5 == ["clip_name2"]
+        assert requested_inputs == [("DualCLIPLoader", "clip_name2")]
+
+    def test_reads_local_krea2_clip_options(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(client, "get_node_input_options", lambda node_class, input_name: [node_class, input_name])
+
+        # Act
+        clips = client.get_available_krea_clips()
+
+        # Assert
+        assert clips == ["CLIPLoader", "clip_name"]
+
     def test_upload_image_returns_server_reference(self, comfyui_server, tmp_path):
         # Arrange
         image_path = tmp_path / "source.png"

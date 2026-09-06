@@ -116,6 +116,20 @@ Acceptance criteria:
 
 Implementation status: searchable model selectors, metadata-backed LoRA strength rows, workflow-aware VAE selection, nested path preservation, asynchronous discovery, local fallback behavior, workflow-first checkpoint profiles with explicit overrides, and validated classic/SDXL/Flux workflow variants are complete.
 
+### 5a. Workflow mode and model-family policy
+
+- [ ] Decide whether the UI needs a separate `Text to Image` mode or whether workflow capability should determine mode availability. The preferred direction is registry metadata for user-facing classification, with workflow-content validation to detect stale or incorrect metadata; filename conventions must not be authoritative. See [`docs/workflow-filtering-policy.md`](docs/workflow-filtering-policy.md).
+- [ ] Define registry metadata for workflow mode (`Text to Image`, `Image Edit`, or `Inpainting`) and migrate bundled and imported workflows to that representation.
+- [ ] Make Auto reconcile both the selected workflow family and the entered model name. When both provide a reliable signal and disagree, show an actionable conflict instead of silently choosing one.
+- [ ] Investigate whether explicit family selection can guarantee that the selected model resource belongs to that family. The problem is that family filtering currently narrows workflows but does not prove that a user-selected checkpoint, diffusion model, or encoder is compatible; solve this through resource metadata, naming heuristics, workflow validation, or a documented combination of these approaches.
+- [ ] Keep Krea2-Turbo out of Inpainting because no bundled workflow supports it today; revisit this restriction if a mask-capable Krea workflow is added.
+- [ ] Make family selection the authority for family-specific resource fields and prompt-field visibility, while preserving workflow validation as the final compatibility check before queueing.
+- [ ] Keep unknown/custom workflows Auto-only; do not expose `Custom` as a selectable family in the user-facing selector.
+- [ ] Add unit tests for mode metadata, capability validation, Auto conflicts, family/resource mismatches, and unknown-workflow behavior.
+- [ ] Add an opt-in GIMP integration flow covering the visible fields and actionable conflict messages for each supported family and mode.
+
+Decision status: the policy choices and open implementation questions are documented in [`docs/workflow-filtering-policy.md`](docs/workflow-filtering-policy.md). This phase is intentionally a product and contract decision before further UI filtering changes.
+
 ### 6. Prompt history and styles
 
 - [x] Add a persistent prompt history store with bounded retention.
