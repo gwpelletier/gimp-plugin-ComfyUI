@@ -1,4 +1,10 @@
-from comfyui_plugin.resources import filter_options, workflow_supports_vae
+from comfyui_plugin.resources import (
+    CheckpointType,
+    checkpoint_profile,
+    filter_options,
+    infer_checkpoint_type,
+    workflow_supports_vae,
+)
 
 
 class TestFilterOptions:
@@ -43,3 +49,40 @@ class TestWorkflowSupportsVae:
 
         # Assert
         assert not supported
+
+
+class TestCheckpointProfiles:
+    def test_workflow_structure_takes_precedence_over_checkpoint_name(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "flux-dev.safetensors"}},
+            "2": {"class_type": "DualCLIPLoader", "inputs": {}},
+        }
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "sdxl/base.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.FLUX
+
+    def test_checkpoint_name_provides_lower_confidence_hint(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}}}
+
+        # Act
+        profile = checkpoint_profile(workflow, "models/sdxl/base.safetensors")
+
+        # Assert
+        assert profile.checkpoint_type == CheckpointType.SDXL
+        assert profile.confidence == "medium"
+
+    def test_explicit_override_wins_over_inference(self):
+        # Arrange
+        workflow = {"1": {"class_type": "UNETLoader", "inputs": {}}}
+
+        # Act
+        profile = checkpoint_profile(workflow, override=CheckpointType.SDXL)
+
+        # Assert
+        assert profile.checkpoint_type == CheckpointType.SDXL
+        assert profile.confidence == "high"

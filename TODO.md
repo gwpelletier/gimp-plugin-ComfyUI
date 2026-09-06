@@ -114,7 +114,7 @@ Acceptance criteria:
 - [x] Keep metadata discovery asynchronous and provide local fallback values when unavailable.
 - [x] Add tests for stale metadata, empty node schemas, and endpoint failure while the dialog is open.
 
-Implementation status: searchable model selectors, metadata-backed LoRA strength rows, workflow-aware VAE selection, nested path preservation, asynchronous discovery, and local fallback behavior are complete.
+Implementation status: searchable model selectors, metadata-backed LoRA strength rows, workflow-aware VAE selection, nested path preservation, asynchronous discovery, local fallback behavior, and workflow-first checkpoint profiles with explicit overrides are complete.
 
 ### 6. Prompt history and styles
 

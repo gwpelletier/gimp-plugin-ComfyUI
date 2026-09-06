@@ -17,7 +17,7 @@ from .client import ComfyUIEvent, ComfyUIEventType
 from .generation import GenerationCoordinator, GenerationRequest
 from .gimp_image import GimpImageOperations
 from .export import ExportError, ImageExporter
-from .resources import workflow_supports_vae
+from .resources import CheckpointType, checkpoint_profile, workflow_supports_vae
 from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
 from .workflow import validate_api_workflow, load_workflow
 
@@ -55,7 +55,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._refresh_workflow_selector()
         self.prompt = self._add_entry(grid, 2, "Prompt", "")
         self.negative_prompt = self._add_entry(grid, 3, "Negative prompt", "")
-        self.checkpoint = self._add_searchable_combo(grid, 4, "Checkpoint")
+        self.checkpoint, self.checkpoint_type = self._add_checkpoint_controls(grid, 4)
         self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 5)
         self.vae = self._add_searchable_combo(grid, 6, "VAE")
         self._update_vae_support()
@@ -65,6 +65,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.seed = self._add_spin(grid, 10, "Seed", -1, -1, 4294967295, 1)
         self.sampler = self._add_combo(grid, 11, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
         self.scheduler = self._add_combo(grid, 12, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self._profile_defaults = {"steps": 20, "cfg": 8.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
             13,
@@ -102,6 +103,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         action_area.pack_start(delete_style_button, False, False, 0)
 
         self.show_all()
+        self.checkpoint.get_child().connect("changed", self._on_checkpoint_changed)
+        self.checkpoint_type.connect("changed", self._on_checkpoint_profile_changed)
+        self._apply_checkpoint_profile()
         if self.eraser_mode:
             self._configure_eraser_defaults()
         self._load_remote_options()
@@ -141,6 +145,23 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.attach(label, 0, row, 1, 1)
         grid.attach(combo, 1, row, 1, 1)
         return combo
+
+    @staticmethod
+    def _add_checkpoint_controls(grid: Gtk.Grid, row: int):
+        label = Gtk.Label(label="Checkpoint", xalign=0)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        checkpoint = Gtk.ComboBoxText.new_with_entry()
+        checkpoint.set_hexpand(True)
+        profile = Gtk.ComboBoxText()
+        for checkpoint_type in CheckpointType:
+            profile.append_text(checkpoint_type.value)
+        profile.set_active(0)
+        profile.set_tooltip_text("Auto detects from workflow first, then checkpoint name")
+        box.pack_start(checkpoint, True, True, 0)
+        box.pack_start(profile, False, False, 0)
+        grid.attach(label, 0, row, 1, 1)
+        grid.attach(box, 1, row, 1, 1)
+        return checkpoint, profile
 
     def _add_lora_controls(self, grid: Gtk.Grid, row: int):
         label = Gtk.Label(label="LoRAs", xalign=0)
@@ -193,6 +214,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             "prompt": self.prompt.get_text(),
             "negative_prompt": self.negative_prompt.get_text(),
             "checkpoint": self.checkpoint.get_child().get_text(),
+            "checkpoint_type": self.checkpoint_type.get_active_text(),
             "vae": self.vae.get_child().get_text(),
             "loras": self._selected_loras(),
             "steps": self.steps.get_value_as_int(),
@@ -208,6 +230,10 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.prompt.set_text(str(settings.get("prompt", "")))
         self.negative_prompt.set_text(str(settings.get("negative_prompt", "")))
         self.checkpoint.get_child().set_text(str(settings.get("checkpoint", "")))
+        checkpoint_type = settings.get("checkpoint_type", CheckpointType.AUTO.value)
+        profile_values = [item.value for item in CheckpointType]
+        if checkpoint_type in profile_values:
+            self.checkpoint_type.set_active(profile_values.index(checkpoint_type))
         self.vae.get_child().set_text(str(settings.get("vae", "")))
         self.steps.set_value(float(settings.get("steps", 20)))
         self.cfg.set_value(float(settings.get("cfg", 8.0)))
@@ -295,6 +321,42 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         if selected:
             self.workflow_registry.select(selected)
         self._update_vae_support()
+        self._apply_checkpoint_profile()
+
+    def _on_checkpoint_changed(self, _entry: Gtk.Entry) -> None:
+        self._apply_checkpoint_profile()
+
+    def _on_checkpoint_profile_changed(self, _selector: Gtk.ComboBoxText) -> None:
+        self._apply_checkpoint_profile()
+
+    def _apply_checkpoint_profile(self) -> None:
+        if not hasattr(self, "steps"):
+            return
+        workflow_path = self.workflow_selector.get_active_id()
+        if not workflow_path:
+            return
+        try:
+            workflow = load_workflow(workflow_path)
+            override = CheckpointType(self.checkpoint_type.get_active_text() or CheckpointType.AUTO.value)
+            profile = checkpoint_profile(workflow, self.checkpoint.get_child().get_text(), override)
+        except (OSError, ValueError):
+            return
+        values = {
+            "steps": profile.steps,
+            "cfg": profile.cfg,
+            "sampler": profile.sampler,
+            "scheduler": profile.scheduler,
+        }
+        if self.steps.get_value_as_int() == self._profile_defaults["steps"]:
+            self.steps.set_value(values["steps"])
+        if self.cfg.get_value() == self._profile_defaults["cfg"]:
+            self.cfg.set_value(values["cfg"])
+        if self.sampler.get_active_text() == self._profile_defaults["sampler"]:
+            self._replace_combo_options(self.sampler, [values["sampler"]])
+        if self.scheduler.get_active_text() == self._profile_defaults["scheduler"]:
+            self._replace_combo_options(self.scheduler, [values["scheduler"]])
+        self._profile_defaults = values
+        self.status.set_text(f"Profile: {profile.checkpoint_type.value} ({profile.confidence} confidence)")
 
     def _update_vae_support(self) -> None:
         if not hasattr(self, "vae"):
@@ -366,6 +428,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._replace_combo_options(self.vae, options["vaes"])
         self._replace_combo_options(self.sampler, options["samplers"])
         self._replace_combo_options(self.scheduler, options["schedulers"])
+        self._apply_checkpoint_profile()
         return False
 
     @staticmethod
@@ -454,6 +517,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_child().get_text() or None,
+                "checkpoint_type": self.checkpoint_type.get_active_text(),
                 "vae": self.vae.get_child().get_text() or None,
                 "workflow_path": workflow_path,
                 "loras": self._selected_loras(),
