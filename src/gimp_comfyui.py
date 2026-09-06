@@ -21,13 +21,13 @@ class ComfyUIPlugin(Gimp.PlugIn):
 
     def do_query_procedures(self):
         """Return the procedures registered by this plug-in."""
-        return ["python-fu-comfyui-batch", "python-fu-comfyui-eraser"]
+        return ["python-fu-comfyui-generate", "python-fu-comfyui-eraser"]
 
     def do_create_procedure(self, name):
         """Create the GIMP procedure associated with ``name``."""
         procedure = Gimp.ImageProcedure.new(self, name, Gimp.PDBProcType.PLUGIN, self.run, None)
         is_eraser = name == "python-fu-comfyui-eraser"
-        procedure.set_menu_label("AI Eraser..." if is_eraser else "Batch...")
+        procedure.set_menu_label("AI Eraser..." if is_eraser else "Generate...")
         procedure.add_menu_path("<Image>/Filters/ComfyUI")
         procedure.set_documentation(
             "Erase selected objects with ComfyUI" if is_eraser else "Process images through ComfyUI",

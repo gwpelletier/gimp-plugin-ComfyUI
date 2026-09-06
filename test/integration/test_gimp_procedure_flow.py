@@ -21,7 +21,7 @@ class TestGimpProcedureFlow:
                 "gi.require_version('Gimp', '3.0')",
                 "from gi.repository import Gimp",
                 "pdb = Gimp.get_pdb()",
-                "procedure = pdb.lookup_procedure('python-fu-comfyui-batch')",
+                "procedure = pdb.lookup_procedure('python-fu-comfyui-generate')",
                 "assert procedure is not None",
                 "eraser_procedure = pdb.lookup_procedure('python-fu-comfyui-eraser')",
                 "assert eraser_procedure is not None",

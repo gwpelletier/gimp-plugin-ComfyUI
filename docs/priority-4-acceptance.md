@@ -21,7 +21,7 @@ The integration runner discovers `GIMP_BIN` and `COMFYUI_URL`. GPU-dependent gen
 The live Priority 4 checks cover:
 
 - ComfyUI version/system stats and `/object_info` validation for the bundled API workflow.
-- Registered `python-fu-comfyui-batch` procedure lookup with a real GIMP image at the noninteractive boundary.
+- Registered `python-fu-comfyui-generate` procedure lookup with a real GIMP image at the noninteractive boundary.
 - GIMP image/layer insertion, metadata, export reopen, startup, and workflow persistence.
 
 ## Manual interactive check
