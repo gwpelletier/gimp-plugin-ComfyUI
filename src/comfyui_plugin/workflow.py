@@ -142,6 +142,7 @@ def apply_generation_parameters(
     unet: str | None = None,
     clip_l: str | None = None,
     clip_t5: str | None = None,
+    krea_model: str | None = None,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -176,6 +177,7 @@ def apply_generation_parameters(
         "unet": unet,
         "clip_l": clip_l,
         "clip_t5": clip_t5,
+        "krea_model": krea_model,
         "seed": seed,
         "width": width,
         "height": height,
@@ -203,6 +205,8 @@ def apply_generation_parameters(
                 inputs["clip_name1"] = clip_l
             if clip_t5 is not None:
                 inputs["clip_name2"] = clip_t5
+        if class_type == "Krea2ImageNode" and krea_model is not None:
+            inputs["model"] = krea_model
         for key, value in {
             "seed": seed,
             "noise_seed": seed,

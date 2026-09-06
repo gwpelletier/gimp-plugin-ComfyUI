@@ -215,9 +215,9 @@ class ComfyUIClient:
         """Return diffusion UNET names advertised by ComfyUI."""
         return self.get_node_input_options("UNETLoader", "unet_name")
 
-    def get_available_clip_models(self) -> list[str]:
-        """Return dual-CLIP resource names advertised by ComfyUI."""
-        return self.get_node_input_options("DualCLIPLoader", "clip_name1")
+    def get_available_clip_models(self, input_name: str = "clip_name1") -> list[str]:
+        """Return the requested dual-CLIP resource names advertised by ComfyUI."""
+        return self.get_node_input_options("DualCLIPLoader", input_name)
 
     def get_available_krea_models(self) -> list[str]:
         """Return hosted Krea2 model names advertised by the custom node."""

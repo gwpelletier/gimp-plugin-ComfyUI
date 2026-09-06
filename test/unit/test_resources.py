@@ -7,6 +7,7 @@ from comfyui_plugin.resources import (
     infer_checkpoint_type,
     validate_checkpoint_workflow,
     workflow_supports_vae,
+    workflow_matches_checkpoint_type,
 )
 
 
@@ -55,6 +56,44 @@ class TestWorkflowSupportsVae:
 
 
 class TestCheckpointProfiles:
+    def test_infers_krea2_from_workflow_node(self):
+        # Arrange
+        workflow = {"1": {"class_type": "Krea2ImageNode", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow)
+
+        # Assert
+        assert checkpoint_type == CheckpointType.KREA2
+
+    def test_infers_sd15_from_classic_checkpoint_workflow(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {}},
+        }
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow)
+
+        # Assert
+        assert checkpoint_type == CheckpointType.SD15
+
+    def test_matches_only_selected_workflow_family(self):
+        # Arrange
+        flux_workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {}},
+            "2": {"class_type": "DualCLIPLoader", "inputs": {}},
+        }
+
+        # Act
+        matches = workflow_matches_checkpoint_type(flux_workflow, CheckpointType.FLUX)
+        misses = workflow_matches_checkpoint_type(flux_workflow, CheckpointType.SDXL)
+
+        # Assert
+        assert matches
+        assert not misses
+
     def test_workflow_structure_takes_precedence_over_checkpoint_name(self):
         # Arrange
         workflow = {
@@ -98,3 +137,11 @@ class TestCheckpointProfiles:
         # Act
         with pytest.raises(ValueError, match="UNETLoader and DualCLIPLoader"):
             validate_checkpoint_workflow(CheckpointType.FLUX, workflow)
+
+    def test_rejects_krea2_checkpoint_without_krea_node(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}}}
+
+        # Act and Assert
+        with pytest.raises(ValueError, match="Krea2ImageNode"):
+            validate_checkpoint_workflow(CheckpointType.KREA2, workflow)

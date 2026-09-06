@@ -32,6 +32,7 @@ class CheckpointType(str, Enum):
     FLUX = "Flux"
     SDXL = "SDXL"
     SD15 = "SD 1.5"
+    KREA2 = "Krea 2"
     CUSTOM = "Custom"
 
 
@@ -53,6 +54,7 @@ _PROFILES = {
     CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal", 0.75),
     CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal", 0.8),
     CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal", 0.65),
+    CheckpointType.KREA2: CheckpointProfile(CheckpointType.KREA2, "high", "workflow", 28, 4.0, "euler", "normal", 1.0),
     CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal", 1.0),
 }
 
@@ -60,10 +62,14 @@ _PROFILES = {
 def infer_checkpoint_type(workflow: dict[str, Any], checkpoint: str = "") -> CheckpointType:
     """Infer a checkpoint family from workflow structure, then its name."""
     classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
+    if "Krea2ImageNode" in classes:
+        return CheckpointType.KREA2
     if "UNETLoader" in classes or "DualCLIPLoader" in classes:
         return CheckpointType.FLUX
     if "CLIPTextEncodeSDXL" in classes or "CLIPTextEncodeSDXLRefiner" in classes:
         return CheckpointType.SDXL
+    if "CheckpointLoaderSimple" in classes and "CLIPTextEncode" in classes:
+        return CheckpointType.SD15
     normalized = checkpoint.casefold()
     if any(marker in normalized for marker in ("flux", "schnell", "dev", "t5xxl")):
         return CheckpointType.FLUX
@@ -71,6 +77,8 @@ def infer_checkpoint_type(workflow: dict[str, Any], checkpoint: str = "") -> Che
         return CheckpointType.SDXL
     if any(marker in normalized for marker in ("sd15", "sd-1.5", "1.5", "dreamshaper")):
         return CheckpointType.SD15
+    if "krea" in normalized:
+        return CheckpointType.KREA2
     return CheckpointType.CUSTOM
 
 
@@ -104,3 +112,12 @@ def validate_checkpoint_workflow(checkpoint_type: CheckpointType, workflow: dict
         raise ValueError("Flux models require a workflow with UNETLoader and DualCLIPLoader")
     if checkpoint_type == CheckpointType.SDXL and "CLIPTextEncodeSDXL" not in classes:
         raise ValueError("SDXL models require a workflow with CLIPTextEncodeSDXL nodes")
+    if checkpoint_type == CheckpointType.SD15 and not {"CheckpointLoaderSimple", "CLIPTextEncode"} <= classes:
+        raise ValueError("SD 1.5 models require a classic CheckpointLoaderSimple workflow")
+    if checkpoint_type == CheckpointType.KREA2 and "Krea2ImageNode" not in classes:
+        raise ValueError("Krea 2 models require a workflow with Krea2ImageNode")
+
+
+def workflow_matches_checkpoint_type(workflow: dict[str, Any], checkpoint_type: CheckpointType) -> bool:
+    """Return whether a workflow belongs to an explicit family selection."""
+    return checkpoint_type == CheckpointType.AUTO or infer_checkpoint_type(workflow) == checkpoint_type

@@ -82,6 +82,17 @@ class TestValidateWorkflowCompatibility:
         assert resolved["2"]["inputs"]["clip_name2"] == "flux/t5xxl_fp8_e4m3fn.safetensors"
         assert all("{{" not in str(value) for node in resolved.values() for value in node["inputs"].values())
 
+    def test_resolves_krea_model_in_custom_node_workflow(self):
+        # Arrange
+        workflow = {"1": {"class_type": "Krea2ImageNode", "inputs": {"model": "old"}}}
+
+        # Act
+        resolved = apply_generation_parameters(workflow, krea_model="Krea 2 Large")
+
+        # Assert
+        assert resolved["1"]["inputs"]["model"] == "Krea 2 Large"
+        assert workflow["1"]["inputs"]["model"] == "old"
+
 
 class TestApplyParameters:
     def test_apply_parameters_replaces_markers_without_mutating_template(self):

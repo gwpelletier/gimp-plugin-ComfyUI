@@ -73,6 +73,7 @@ class GenerationRequest:
     scheduler: str = "normal"
     denoise: float = 1.0
     loras: dict[str, float] | None = None
+    krea_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ class GenerationCoordinator:
             unet=request.unet,
             clip_l=request.clip_l,
             clip_t5=request.clip_t5,
+            krea_model=request.krea_model,
             seed=seed,
             width=request.width,
             height=request.height,
