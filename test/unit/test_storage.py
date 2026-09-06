@@ -71,3 +71,44 @@ class TestWorkflowRegistry:
         assert second_count == 0
         assert removed
         assert registry.list() == []
+
+    def test_rejects_missing_and_non_json_files(self, tmp_path):
+        # Arrange
+        missing_path = tmp_path / "missing.json"
+        text_path = tmp_path / "workflow.txt"
+        text_path.write_text("{}", encoding="utf-8")
+        registry = WorkflowRegistry(tmp_path / "workflows.json")
+
+        # Act
+        count = registry.add([missing_path, text_path])
+
+        # Assert
+        assert count == 0
+        assert registry.list() == []
+
+    def test_persists_selected_path_and_clears_it_on_removal(self, tmp_path):
+        # Arrange
+        workflow_path = tmp_path / "workflow.json"
+        workflow_path.write_text("{}", encoding="utf-8")
+        registry = WorkflowRegistry(tmp_path / "workflows.json")
+        registry.add([workflow_path])
+
+        # Act
+        registry.select(workflow_path)
+        selected_path = registry.selected_path
+        registry.remove(workflow_path)
+
+        # Assert
+        assert selected_path == str(workflow_path.resolve())
+        assert registry.selected_path is None
+
+    def test_rejects_selecting_unregistered_path(self, tmp_path):
+        # Arrange
+        registry = WorkflowRegistry(tmp_path / "workflows.json")
+
+        # Act
+        with pytest.raises(StorageError, match="not registered"):
+            registry.select(tmp_path / "missing.json")
+
+        # Assert
+        assert registry.selected_path is None

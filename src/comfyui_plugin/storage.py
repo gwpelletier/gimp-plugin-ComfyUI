@@ -91,6 +91,14 @@ class WorkflowRegistry:
             raise StorageError(f"Invalid workflow registry: {self.store.path}")
         return [item for item in workflows if isinstance(item, dict)]
 
+    @property
+    def selected_path(self) -> str | None:
+        """Return the persisted selected workflow path, if it is registered."""
+        selected = self.store.load().get("selected_path")
+        if not isinstance(selected, str):
+            return None
+        return selected if any(item.get("path") == selected for item in self.list()) else None
+
     def add(self, paths: list[str | Path]) -> int:
         """Register new JSON workflow paths and return the number added."""
         workflows = self.list()
@@ -98,13 +106,21 @@ class WorkflowRegistry:
         additions = []
         for source_path in paths:
             path = Path(source_path).expanduser().resolve()
-            if path.suffix.lower() != ".json" or str(path) in existing:
+            if not path.is_file() or path.suffix.lower() != ".json" or str(path) in existing:
                 continue
             additions.append({"path": str(path), "title": path.stem})
             existing.add(str(path))
         if additions:
             self.store.save({"workflows": workflows + additions})
         return len(additions)
+
+    def select(self, path: str | Path | None) -> None:
+        """Persist a registered workflow as the next selected entry."""
+        workflows = self.list()
+        selected_path = None if path is None else str(Path(path).expanduser().resolve())
+        if selected_path is not None and not any(item.get("path") == selected_path for item in workflows):
+            raise StorageError(f"Workflow is not registered: {selected_path}")
+        self.store.save({"workflows": workflows, "selected_path": selected_path})
 
     def remove(self, path: str | Path) -> bool:
         """Remove one resolved workflow path and report whether it existed."""
@@ -113,5 +129,9 @@ class WorkflowRegistry:
         remaining = [item for item in workflows if item.get("path") != target]
         if len(remaining) == len(workflows):
             return False
-        self.store.save({"workflows": remaining})
+        selected_path = self.selected_path
+        self.store.save({
+            "workflows": remaining,
+            "selected_path": None if selected_path == target else selected_path,
+        })
         return True

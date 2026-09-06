@@ -6,7 +6,7 @@ Licensed under GPL-3.0-only. See [`docs/migration-notice.md`](docs/migration-not
 
 ## Current status
 
-The repository contains the installable plug-in boundary, ComfyUI queue/history client, workflow substitution, selection masks, cancellation handling, generation metadata, build/install scripts, and unit/integration test coverage. Workflow registry UI and dynamic resource controls are the next implementation slice.
+The repository contains the installable plug-in boundary, ComfyUI queue/history client, workflow substitution, selection masks, cancellation handling, generation metadata, workflow registry UI, build/install scripts, and unit/integration test coverage. Dynamic model/resource controls are the next implementation slice.
 
 ## Layout
 

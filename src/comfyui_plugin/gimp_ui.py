@@ -15,8 +15,8 @@ from gi.repository import Gimp, GimpUi, GLib, Gtk
 from .client import ComfyUIClient
 from .generation import GenerationCoordinator, GenerationRequest, parse_lora_settings
 from .gimp_image import GimpImageOperations
-from .storage import PluginPaths
-from .workflow import load_workflow
+from .storage import PluginPaths, WorkflowRegistry
+from .workflow import validate_api_workflow, load_workflow
 
 
 class ComfyUIGenerationDialog(GimpUi.Dialog):
@@ -27,6 +27,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         super().__init__(title="ComfyUI Batch", flags=0)
         self.image = image
         self.image_operations = GimpImageOperations()
+        self.plugin_paths = PluginPaths(Path(Gimp.directory()) / "comfyui")
+        self.plugin_paths.ensure()
+        self.workflow_registry = WorkflowRegistry(self.plugin_paths.workflow_registry)
         self.worker: threading.Thread | None = None
         self.active_client: ComfyUIClient | None = None
         self.active_coordinator: GenerationCoordinator | None = None
@@ -41,8 +44,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         content.pack_start(grid, True, True, 0)
 
         self.endpoint = self._add_entry(grid, 0, "ComfyUI URL", "http://127.0.0.1:8188")
-        workflow_path = Path(__file__).resolve().parents[2] / "workflows" / "image-edit-api.json"
-        self.workflow_path = self._add_file_entry(grid, 1, "Workflow", str(workflow_path))
+        self.workflow_selector = self._add_workflow_selector(grid, 1)
+        self._ensure_default_workflows()
+        self._refresh_workflow_selector()
         self.prompt = self._add_entry(grid, 2, "Prompt", "")
         self.negative_prompt = self._add_entry(grid, 3, "Negative prompt", "")
         self.checkpoint = self._add_entry(grid, 4, "Checkpoint", "")
@@ -77,23 +81,49 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.attach(entry, 1, row, 1, 1)
         return entry
 
-    def _add_file_entry(self, grid: Gtk.Grid, row: int, label_text: str, value: str) -> Gtk.Entry:
-        """Add a path entry with a workflow file chooser button."""
-        label = Gtk.Label(label=label_text, xalign=0)
+    def _add_workflow_selector(self, grid: Gtk.Grid, row: int) -> Gtk.ComboBoxText:
+        """Add a registry-backed workflow selector and management controls."""
+        label = Gtk.Label(label="Workflow", xalign=0)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        entry = Gtk.Entry(text=value)
-        entry.set_hexpand(True)
-        browse = Gtk.Button(label="Browse")
-        browse.connect("clicked", self._choose_workflow)
-        box.pack_start(entry, True, True, 0)
-        box.pack_start(browse, False, False, 0)
+        selector = Gtk.ComboBoxText()
+        selector.set_hexpand(True)
+        selector.connect("changed", self._on_workflow_changed)
+        import_button = Gtk.Button(label="Import")
+        import_button.connect("clicked", self._choose_workflows)
+        remove_button = Gtk.Button(label="Remove")
+        remove_button.connect("clicked", self._remove_selected_workflow)
+        box.pack_start(selector, True, True, 0)
+        box.pack_start(import_button, False, False, 0)
+        box.pack_start(remove_button, False, False, 0)
         grid.attach(label, 0, row, 1, 1)
         grid.attach(box, 1, row, 1, 1)
-        return entry
+        return selector
 
-    def _choose_workflow(self, _button: Gtk.Button) -> None:
+    def _ensure_default_workflows(self) -> None:
+        """Register the workflows shipped with the plug-in."""
+        workflow_directory = Path(__file__).resolve().parents[2] / "workflows"
+        self.workflow_registry.add([
+            workflow_directory / "image-edit-api.json",
+            workflow_directory / "inpainting-api.json",
+        ])
+
+    def _refresh_workflow_selector(self) -> None:
+        self.workflow_selector.remove_all()
+        workflows = self.workflow_registry.list()
+        for workflow in workflows:
+            self.workflow_selector.append(workflow["path"], f'{workflow["title"]} - {workflow["path"]}')
+        selected = self.workflow_registry.selected_path or (workflows[0]["path"] if workflows else None)
+        if selected is not None:
+            self.workflow_selector.set_active_id(selected)
+
+    def _on_workflow_changed(self, selector: Gtk.ComboBoxText) -> None:
+        selected = selector.get_active_id()
+        if selected:
+            self.workflow_registry.select(selected)
+
+    def _choose_workflows(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserDialog(
-            title="Select ComfyUI API Workflow",
+            title="Import ComfyUI API Workflows",
             parent=self,
             action=Gtk.FileChooserAction.OPEN,
         )
@@ -102,9 +132,26 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         workflow_filter.set_name("ComfyUI API workflows (*.json)")
         workflow_filter.add_pattern("*.json")
         dialog.add_filter(workflow_filter)
+        dialog.set_select_multiple(True)
         if dialog.run() == Gtk.ResponseType.OK:
-            self.workflow_path.set_text(dialog.get_filename())
+            try:
+                valid_paths = []
+                for filename in dialog.get_filenames():
+                    workflow = load_workflow(filename)
+                    validate_api_workflow(workflow)
+                    valid_paths.append(filename)
+                self.workflow_registry.add(valid_paths)
+                self._refresh_workflow_selector()
+                self.status.set_text(f"Imported {len(valid_paths)} workflow(s)")
+            except Exception as error:
+                self.status.set_text(f"Workflow import error: {error}")
         dialog.destroy()
+
+    def _remove_selected_workflow(self, _button: Gtk.Button) -> None:
+        selected = self.workflow_selector.get_active_id()
+        if selected and self.workflow_registry.remove(selected):
+            self._refresh_workflow_selector()
+            self.status.set_text("Workflow removed")
 
     def _load_remote_options(self) -> None:
         """Fetch model and sampler options without blocking the GTK thread."""
@@ -171,7 +218,10 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         if self.worker and self.worker.is_alive():
             return
         try:
-            workflow = load_workflow(self.workflow_path.get_text())
+            workflow_path = self.workflow_selector.get_active_id()
+            if not workflow_path:
+                raise ValueError("Select a ComfyUI API workflow")
+            workflow = load_workflow(workflow_path)
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client
             coordinator = GenerationCoordinator(client)
@@ -183,7 +233,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_text() or None,
-                "workflow_path": self.workflow_path.get_text(),
+                "workflow_path": workflow_path,
                 "loras": parse_lora_settings(self.loras.get_text()),
                 "seed": self.seed.get_value_as_int(),
                 "steps": self.steps.get_value_as_int(),

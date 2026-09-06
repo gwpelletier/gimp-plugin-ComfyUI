@@ -80,13 +80,15 @@ Acceptance criteria:
 
 ### 4. Workflow registry UI
 
-- [ ] Replace the workflow path-only field with a selectable workflow registry view.
-- [ ] Support importing one or more API-format JSON workflows through a GTK file chooser.
-- [ ] Show workflow titles and paths, with search/filtering for larger registries.
-- [ ] Support removing a registry entry without deleting the underlying file.
-- [ ] Persist the last selected workflow through `WorkflowRegistry`.
-- [ ] Add unit tests for registry edge cases: duplicate paths, invalid extensions, missing files, and removal.
-- [ ] Add a GIMP integration flow that imports a workflow and confirms it is selectable after restart.
+- [x] Replace the workflow path-only field with a selectable workflow registry view.
+- [x] Support importing one or more API-format JSON workflows through a GTK file chooser.
+- [x] Show workflow titles and paths, with search/filtering for larger registries.
+- [x] Support removing a registry entry without deleting the underlying file.
+- [x] Persist the last selected workflow through `WorkflowRegistry`.
+- [x] Add unit tests for registry edge cases: duplicate paths, invalid extensions, missing files, and removal.
+- [x] Add an opt-in GIMP-process flow that verifies registry selection persistence across restarts.
+
+Implementation status: registry-backed selector, bundled workflow registration, multi-file API-format import validation, non-destructive removal, selected-path persistence, and unit coverage are complete. Full interactive GTK selection after a GIMP restart remains a manual acceptance check.
 
 Acceptance criteria:
 
