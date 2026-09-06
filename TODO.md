@@ -43,6 +43,7 @@ Current validation baseline: run the default suite for fast checks; the current 
 - [ ] Run a real ComfyUI inpainting workflow using a configured mask-capable checkpoint before marking complete.
 
 Implementation status: mask export, workflow injection, generation plumbing, and automated tests are complete. The live inpainting validation remains pending until a mask-capable ComfyUI workflow and checkpoint are configured.
+Staging: `test/integration/test_comfyui_inpainting_flow.py` automates the live check when `COMFYUI_MASK_WORKFLOW`, `COMFYUI_TEST_IMAGE`, `COMFYUI_TEST_MASK`, `COMFYUI_CHECKPOINT`, and `COMFYUI_URL` are provided. Operator steps are documented in [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
 
 Acceptance criteria:
 
@@ -60,6 +61,7 @@ Acceptance criteria:
 - [x] Add opt-in ComfyUI integration coverage that starts a longer job, cancels it, and verifies no outputs are returned.
 
 Implementation status: cancellation state, interrupt handling, active prompt tracking, cleanup, unit coverage, and an opt-in real-ComfyUI cancellation flow are complete. The UI-level no-result-layer assertion remains covered by the coordinator guard and should be exercised during a configured GIMP acceptance run.
+Staging: the manual GIMP procedure, cancellation, metadata, and cleanup checklist is documented in [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
 
 Acceptance criteria:
 

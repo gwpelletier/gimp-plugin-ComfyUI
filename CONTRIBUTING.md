@@ -81,6 +81,8 @@ COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
 python -m pytest test/integration/test_comfyui_cancellation_flow.py
 ```
 
+For the remaining Priority 1 inpainting and interactive GIMP acceptance steps, see [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
+
 ## Build and install
 
 `python scripts/build.py` creates a versioned `dist/gimp-comfyui-<version>.zip` archive and removes stale archives from earlier builds. To install into the current user's standard GIMP 3 plug-in directory:
