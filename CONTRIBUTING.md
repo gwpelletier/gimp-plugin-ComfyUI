@@ -136,7 +136,13 @@ Pull requests validate all included commits with commitlint. Merges to `main`
 are processed by Release Please, which determines the next semantic version,
 updates `src/comfyui_plugin/__init__.py`, and opens or updates a release pull
 request with the changelog. Merge that release pull request to create the GitHub
-release and version tag.
+release and version tag. The release workflow builds the versioned plug-in ZIP
+and attaches it to the GitHub release.
+
+Configure a repository secret named `RELEASE_PLEASE_TOKEN` with permission to
+write contents, issues, and pull requests. Release Please uses this token when
+available so its release pull request triggers the normal CI and commitlint
+workflows; GitHub's built-in `GITHUB_TOKEN` does not trigger new workflows.
 
 Use short-lived branches named `<type>/<short-name>`, such as
 `feature/inpainting-controls`, `fix/websocket-timeout`, or `docs/release-process`.
