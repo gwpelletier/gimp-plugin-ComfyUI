@@ -15,11 +15,12 @@ DeepWiki's upstream ComfyUI reference identifies global `/interrupt` and queue m
 
 Before changing the client to a newer job API, verify the endpoint and response schema against the target ComfyUI version, add local fake-server tests, and add an opt-in live cancellation flow. Keep the legacy path available until the supported-version matrix confirms the replacement.
 
-WebSocket events are the preferred future path for progress and completion notifications. The planned WebSocket work must define handling for `status`, `progress`, `executing`, `executed`, cached execution, previews, and `execution_error` messages before it replaces REST polling.
+WebSocket events are supported through the standard-library `ComfyUIWebSocket` transport. It handles `status`, `progress`, `executing`, `executed`, cached execution, binary previews, and `execution_error` messages without adding a dependency to GIMP's embedded Python. REST polling remains available as the completion fallback.
 
 ## Test expectations
 
 - Unit tests use the local HTTP fake and must cover response parsing, HTTP failures, malformed JSON, cancellation, and endpoint-specific request payloads.
 - Integration tests are opt-in and must declare their required ComfyUI version, workflow, checkpoint, custom nodes, and environment variables.
 - `object_info` discovery should be used to validate resource names and required node inputs before queueing user work where practical.
+- The live WebSocket flow requires a ComfyUI instance exposing `/ws` and uses the same `clientId` as REST queueing.
 - DeepWiki is a supplemental upstream reference, not a substitute for the local fake, a configured live flow, or the official ComfyUI source/API schema.

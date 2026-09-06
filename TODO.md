@@ -133,30 +133,36 @@ Decision: retain the modal dialog for the first release. The existing procedure 
 ### 8. WebSocket progress and previews
 
 - [x] Record the ComfyUI WebSocket protocol and dependency decision point in `docs/comfyui-compatibility.md`.
-- [ ] Evaluate a WebSocket implementation compatible with GIMP's embedded Python before adding a dependency.
-- [ ] Prefer a standard-library-compatible transport or explicitly package a reviewed dependency with license notices.
-- [ ] Add a client event model for `status`, `progress`, `executing`, `executed`, and `execution_error` messages.
-- [ ] Keep preview bytes and progress callbacks outside GTK until scheduled with `GLib.idle_add`.
-- [ ] Add fake WebSocket boundary tests or a local protocol adapter test.
-- [ ] Add an opt-in live flow that verifies progress events and preview cleanup.
+- [x] Evaluate a WebSocket implementation compatible with GIMP's embedded Python before adding a dependency.
+- [x] Prefer a standard-library-compatible transport or explicitly package a reviewed dependency with license notices.
+- [x] Add a client event model for `status`, `progress`, `executing`, `executed`, and `execution_error` messages.
+- [x] Keep preview bytes and progress callbacks outside GTK until scheduled with `GLib.idle_add`.
+- [x] Add fake WebSocket boundary tests or a local protocol adapter test.
+- [x] Add an opt-in live flow that verifies progress events and preview cleanup.
+
+Implementation status: standard-library WebSocket transport, typed event parsing, binary preview handling, unit coverage, and live connection coverage are complete. REST polling remains the default completion path.
 
 ### 9. Batch processing
 
-- [ ] Define input sources: current image, selected open images, and folder files.
-- [ ] Define output modes: new GIMP images, layers in the current image, and export directory.
-- [ ] Add a queue model with per-item status, retry, cancel, and partial-failure reporting.
-- [ ] Prevent concurrent jobs from sharing mutable workflow state.
-- [ ] Add unit tests for queue transitions and partial failures.
-- [ ] Add an integration flow for at least two inputs and two outputs.
-- [ ] Document resource usage and whether jobs are sequential by default.
+- [x] Define input sources: current image, selected open images, and folder files.
+- [x] Define output modes: new GIMP images, layers in the current image, and export directory.
+- [x] Add a queue model with per-item status, retry, cancel, and partial-failure reporting.
+- [x] Prevent concurrent jobs from sharing mutable workflow state.
+- [x] Add unit tests for queue transitions and partial failures.
+- [x] Add an integration flow for at least two inputs and two outputs.
+- [x] Document resource usage and whether jobs are sequential by default.
+
+Implementation status: `BatchQueue` and `GenerationCoordinator.run_batch()` process one request at a time, deep-copy workflow inputs, preserve partial successes, support retries/cancellation, and expose per-item updates. The modal dialog currently supports one staged image per invocation; folder/open-image selection remains an API boundary for the next UI surface.
 
 ### 10. Export and file lifecycle
 
-- [ ] Add an output directory selector and safe filename generation.
-- [ ] Preserve source extensions where possible and validate downloaded content before export.
-- [ ] Avoid overwriting user files unless explicitly requested.
-- [ ] Add tests for filename collisions, invalid paths, and failed writes.
-- [ ] Add an integration assertion that exported files can be reopened by GIMP.
+- [x] Add an output directory selector and safe filename generation.
+- [x] Preserve source extensions where possible and validate downloaded content before export.
+- [x] Avoid overwriting user files unless explicitly requested.
+- [x] Add tests for filename collisions, invalid paths, and failed writes.
+- [x] Add an integration assertion that exported files can be reopened by GIMP.
+
+Implementation status: the dialog offers layer, new-image, and export-directory output modes. `ImageExporter` validates PNG/JPEG/GIF/WebP signatures, preserves extensions, creates collision-safe names, and requires explicit overwrite.
 
 ## Priority 4: Quality and release hardening
 

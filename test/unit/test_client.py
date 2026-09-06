@@ -2,10 +2,42 @@ import json
 
 import pytest
 
-from comfyui_plugin.client import ComfyUIClient, ComfyUIError
+from comfyui_plugin.client import (
+    ComfyUIClient,
+    ComfyUIError,
+    ComfyUIEventType,
+    parse_websocket_event,
+)
 
 
 class TestComfyUIClient:
+    def test_parses_progress_websocket_event(self):
+        # Arrange
+        payload = '{"type": "progress", "data": {"prompt_id": "job-1", "value": 3, "max": 10}}'
+
+        # Act
+        event = parse_websocket_event(payload)
+
+        # Assert
+        assert event.event_type == ComfyUIEventType.PROGRESS
+        assert event.prompt_id == "job-1"
+        assert event.value == 3
+        assert event.maximum == 10
+
+    def test_parses_execution_error_and_unknown_events(self):
+        # Arrange
+        error_event = parse_websocket_event({"type": "execution_error", "data": {"node": 4}})
+        unknown_event = parse_websocket_event({"type": "future_event", "data": {}})
+
+        # Act
+        error_type = error_event.event_type
+        unknown_type = unknown_event.event_type
+
+        # Assert
+        assert error_type == ComfyUIEventType.EXECUTION_ERROR
+        assert error_event.node_id == "4"
+        assert unknown_type == ComfyUIEventType.UNKNOWN
+
     def test_health_check_returns_false_when_server_is_unreachable(self):
         # Arrange
         client = ComfyUIClient("http://127.0.0.1:1", timeout=0.1)

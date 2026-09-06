@@ -15,6 +15,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from threading import Event
 from urllib.error import HTTPError, URLError
@@ -46,6 +47,62 @@ class ComfyUpload:
     filename: str
     subfolder: str
     folder_type: str = "input"
+
+
+class ComfyUIEventType(str, Enum):
+    """Event types emitted by ComfyUI's WebSocket protocol."""
+
+    STATUS = "status"
+    PROGRESS = "progress"
+    EXECUTING = "executing"
+    EXECUTED = "executed"
+    EXECUTION_ERROR = "execution_error"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class ComfyUIEvent:
+    """Normalized WebSocket event delivered by ComfyUI."""
+
+    event_type: ComfyUIEventType
+    prompt_id: str | None = None
+    node_id: str | None = None
+    value: int | None = None
+    maximum: int | None = None
+    data: dict | None = None
+
+
+def parse_websocket_event(payload: str | bytes | dict) -> ComfyUIEvent:
+    """Parse one ComfyUI WebSocket JSON message into a typed event."""
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8")
+    message = json.loads(payload) if isinstance(payload, str) else payload
+    if not isinstance(message, dict):
+        raise ComfyUIError("ComfyUI WebSocket event must be a JSON object")
+    event_name = str(message.get("type", ComfyUIEventType.UNKNOWN))
+    try:
+        event_type = ComfyUIEventType(event_name)
+    except ValueError:
+        event_type = ComfyUIEventType.UNKNOWN
+    data = message.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    return ComfyUIEvent(
+        event_type=event_type,
+        prompt_id=_as_optional_string(data.get("prompt_id")),
+        node_id=_as_optional_string(data.get("node")),
+        value=_as_optional_int(data.get("value")),
+        maximum=_as_optional_int(data.get("max")),
+        data=data,
+    )
+
+
+def _as_optional_string(value: object) -> str | None:
+    return None if value is None else str(value)
+
+
+def _as_optional_int(value: object) -> int | None:
+    return value if isinstance(value, int) else None
 
 
 class ComfyUIClient:
@@ -90,6 +147,18 @@ class ComfyUIClient:
             ComfyUIError: If the endpoint is unreachable or returns invalid JSON.
         """
         return self._json_request("GET", "/system_stats")
+
+    def open_websocket(self, *, timeout: float | None = None):
+        """Create a standard-library WebSocket connected to this client ID."""
+        from .websocket import ComfyUIWebSocket
+
+        scheme = "wss" if self.base_url.startswith("https://") else "ws"
+        host = self.base_url.split("://", 1)[-1]
+        return ComfyUIWebSocket(
+            f"{scheme}://{host}/ws",
+            client_id=self.client_id,
+            timeout=self.timeout if timeout is None else timeout,
+        )
 
     def interrupt(self) -> dict:
         """Interrupt the currently executing ComfyUI prompt.

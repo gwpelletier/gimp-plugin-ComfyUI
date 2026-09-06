@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .batch import BatchItem, BatchQueue, BatchSummary
 from .client import ComfyImage, ComfyUICancelledError, ComfyUIClient
 from .workflow import apply_generation_parameters
 
@@ -118,6 +119,24 @@ class GenerationCoordinator:
         finally:
             with self._state_lock:
                 self._cancellation_events.discard(cancellation_event)
+
+    def run_batch(
+        self,
+        requests: list[GenerationRequest],
+        *,
+        max_retries: int = 0,
+        cancellation_event: threading.Event | None = None,
+        on_update: Callable[[BatchItem[GenerationRequest, GenerationResult]], None] | None = None,
+    ) -> BatchSummary[GenerationResult]:
+        """Run requests sequentially while retaining partial successes."""
+        items = [BatchItem(str(index), request) for index, request in enumerate(requests)]
+        queue = BatchQueue[GenerationRequest, GenerationResult](max_retries=max_retries)
+        return queue.run(
+            items,
+            self.run,
+            cancellation_event=cancellation_event,
+            on_update=on_update,
+        )
 
     def _run(
         self,

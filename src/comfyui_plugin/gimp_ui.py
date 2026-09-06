@@ -15,6 +15,7 @@ from gi.repository import Gimp, GimpUi, GLib, Gtk
 from .client import ComfyUIClient
 from .generation import GenerationCoordinator, GenerationRequest
 from .gimp_image import GimpImageOperations
+from .export import ExportError, ImageExporter
 from .resources import workflow_supports_vae
 from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
 from .workflow import validate_api_workflow, load_workflow
@@ -61,8 +62,16 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.seed = self._add_spin(grid, 10, "Seed", -1, -1, 4294967295, 1)
         self.sampler = self._add_combo(grid, 11, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
         self.scheduler = self._add_combo(grid, 12, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.output_mode = self._add_combo(
+            grid,
+            13,
+            "Output",
+            ["GIMP layers", "New image", "Export directory"],
+            "GIMP layers",
+        )
+        self.output_directory = self._add_entry(grid, 14, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 13, 2, 1)
+        grid.attach(self.status, 0, 15, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -498,7 +507,21 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             if self.cancel_requested:
                 self.status.set_text("Cancelled")
                 return False
-            if self.image is not None and self.image.is_valid():
+            output_mode = self.output_mode.get_active_text()
+            if output_mode == "Export directory":
+                export_directory = self.output_directory.get_text().strip()
+                if not export_directory:
+                    raise ExportError("Choose an export directory")
+                exporter = ImageExporter(export_directory)
+                for output_index, output_path in enumerate(output_paths):
+                    exporter.export(output_path.read_bytes(), output_path.name, index=output_index)
+            elif output_mode == "New image" or self.image is None or not self.image.is_valid():
+                image = self.image_operations.load_result(output_paths[0])
+                Gimp.Display.new(image)
+                for output_path in output_paths[1:]:
+                    layer = self.image_operations.insert_layer(image, output_path, "ComfyUI Result")
+                    self.image_operations.attach_generation_metadata(layer, metadata)
+            else:
                 for output_index, output_path in enumerate(output_paths):
                     layer = self.image_operations.insert_layer(
                         self.image,
@@ -507,13 +530,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     )
                     self.image_operations.attach_generation_metadata(layer, metadata)
                 Gimp.displays_flush()
-            else:
-                image = self.image_operations.load_result(output_paths[0])
-                Gimp.Display.new(image)
-                for output_path in output_paths[1:]:
-                    layer = self.image_operations.insert_layer(image, output_path, "ComfyUI Result")
-                    self.image_operations.attach_generation_metadata(layer, metadata)
-            self.status.set_text("Done")
+            self.status.set_text("Exported" if output_mode == "Export directory" else "Done")
             self.completed = True
         except Exception as error:
             self._show_error(str(error))

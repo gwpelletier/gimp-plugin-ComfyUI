@@ -21,6 +21,32 @@ class FakeClient:
 
 
 class TestGenerationCoordinator:
+    def test_runs_batch_sequentially_and_isolates_workflow_state(self):
+        # Arrange
+        client = FakeClient()
+        coordinator = GenerationCoordinator(client)
+        requests = [
+            GenerationRequest(
+                workflow={"1": {"class_type": "KSampler", "inputs": {"seed": 1}}},
+                prompt="first",
+                negative_prompt="",
+                seed=1,
+            ),
+            GenerationRequest(
+                workflow={"1": {"class_type": "KSampler", "inputs": {"seed": 1}}},
+                prompt="second",
+                negative_prompt="",
+                seed=2,
+            ),
+        ]
+
+        # Act
+        summary = coordinator.run_batch(requests)
+
+        # Assert
+        assert [item.result.seed for item in summary.completed] == [1, 2]
+        assert requests[0].workflow["1"]["inputs"]["seed"] == 1
+
     def test_runs_prepared_workflow_and_reports_result(self):
         # Arrange
         client = FakeClient()

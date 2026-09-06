@@ -89,6 +89,12 @@ COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
 python -m pytest test/integration/test_comfyui_cancellation_flow.py
 ```
 
+The batch generation flow additionally requires `COMFYUI_TEST_IMAGE_2` and can be run with:
+
+```sh
+python scripts/run_integration.py test/integration/test_comfyui_batch_flow.py
+```
+
 For the remaining Priority 1 inpainting and interactive GIMP acceptance steps, see [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
 
 ## Build and install
