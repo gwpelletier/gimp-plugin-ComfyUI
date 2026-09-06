@@ -143,12 +143,14 @@ Use short-lived branches named `<type>/<short-name>`, such as
 Open pull requests against `main`; do not use a long-lived `develop` or release
 branch. Release Please branches and Dependabot branches are managed exceptions.
 
-Protect `main` in the GitHub repository settings by requiring pull requests,
-the `CI / test-and-build (3.10)` and `CI / test-and-build (3.12)` checks,
-`Commit messages / commitlint`, and `Branch policy / branch-name`. Approvals
-remain optional because this repository has a solo maintainer. Require branches
-to be up to date, resolve conversations, disable force pushes, and use squash
-merges with a Conventional Commit pull request title.
+Protect `main` in the GitHub repository settings for non-admin contributors by
+requiring pull requests, the `CI / test-and-build (3.10)` and
+`CI / test-and-build (3.12)` checks, `Commit messages / commitlint`, and
+`Branch policy / branch-name`. Approvals remain optional because this repository
+has a solo maintainer. Require branches to be up to date, resolve conversations,
+disable force pushes, and use squash merges with a Conventional Commit pull
+request title. Repository administrators may bypass these protections when
+necessary; other contributors may not.
 
 ## Change expectations
 
