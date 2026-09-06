@@ -30,7 +30,7 @@ The test uploads both files, injects `LoadImageMask` into the workflow's mask co
 Install the current bundle with `python scripts/install.py`, restart GIMP, and configure a reachable ComfyUI endpoint.
 
 1. Open a test image and create a visible selection.
-2. Run `Filters > AI > ComfyUI Batch...`.
+2. Run `Filters > ComfyUI > Batch...`.
 3. Select a mask-capable API workflow, enter a valid checkpoint and prompt, and generate.
 4. Verify the result layer is inserted, the original selection remains unchanged, and the temporary source/mask files are removed after the worker finishes.
 5. Inspect the result layer's `comfy-data-v1` parasite and verify the workflow path, prompts, checkpoint, LoRAs, seed, sampler, scheduler, CFG, steps, denoise, and prompt ID.

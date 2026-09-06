@@ -49,4 +49,4 @@ The installer uses the standard per-user plug-in directory for the configured GI
 - macOS: `~/Library/Application Support/GIMP/<version>/plug-ins/`
 - Windows: `%APPDATA%/GIMP/<version>/plug-ins/`
 
-Set `GIMP_PLUGIN_DIR` to override the destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` for automatic path construction. Restart GIMP after installation. The plug-in is currently registered under `Filters > AI > ComfyUI Batch...`.
+Set `GIMP_PLUGIN_DIR` to override the destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` for automatic path construction. Restart GIMP after installation. The plug-in is currently registered under `Filters > ComfyUI > Batch...`.

@@ -84,7 +84,7 @@ Acceptance criteria:
 - [x] Add an opt-in GIMP flow for eraser registration and painted-selection configuration.
 - [x] Document the brush workflow and mask requirements.
 
-Implementation status: **Filters > AI > ComfyUI AI Eraser...** uses local GIMP brush strokes through Quick Mask, then commits one masked inpainting request to ComfyUI. See [`docs/ai-eraser.md`](docs/ai-eraser.md).
+Implementation status: **Filters > ComfyUI > AI Eraser...** uses local GIMP brush strokes through Quick Mask, then commits one masked inpainting request to ComfyUI. See [`docs/ai-eraser.md`](docs/ai-eraser.md).
 
 ## Priority 2: Migrate the useful source-project UI
 

@@ -28,7 +28,7 @@ The live Priority 4 checks cover:
 
 With GIMP restarted after installation:
 
-1. Open an image and invoke **Filters > AI > ComfyUI Batch**.
+1. Open an image and invoke **Filters > ComfyUI > Batch**.
 2. Confirm the dialog opens after `GimpUi.init()`, then cancel it and confirm no result layer is created.
 3. Configure a live workflow, generate one result, and verify the result layer and `comfy-data-v1` metadata parasite.
 4. Select **Export directory**, generate again, and verify the exported file opens in GIMP.

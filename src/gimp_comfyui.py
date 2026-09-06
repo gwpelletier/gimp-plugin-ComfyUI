@@ -27,8 +27,8 @@ class ComfyUIPlugin(Gimp.PlugIn):
         """Create the GIMP procedure associated with ``name``."""
         procedure = Gimp.ImageProcedure.new(self, name, Gimp.PDBProcType.PLUGIN, self.run, None)
         is_eraser = name == "python-fu-comfyui-eraser"
-        procedure.set_menu_label("ComfyUI AI Eraser..." if is_eraser else "ComfyUI Batch...")
-        procedure.add_menu_path("<Image>/Filters/AI")
+        procedure.set_menu_label("AI Eraser..." if is_eraser else "Batch...")
+        procedure.add_menu_path("<Image>/Filters/ComfyUI")
         procedure.set_documentation(
             "Erase selected objects with ComfyUI" if is_eraser else "Process images through ComfyUI",
             "Paint an erase mask with GIMP's brush and fill it with ComfyUI." if is_eraser else "Submit an image batch to a ComfyUI workflow.",
