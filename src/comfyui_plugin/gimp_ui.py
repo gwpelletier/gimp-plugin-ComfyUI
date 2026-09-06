@@ -398,7 +398,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             maximum = event.maximum or 0
             message = f"Generating: step {value}/{maximum}" if maximum else "Generating..."
         elif event.event_type == ComfyUIEventType.EXECUTING:
-            message = f"Executing node {event.node_id}" if event.node_id else "Executing..."
+            if event.node_id and event.node_type:
+                message = f"Executing {event.node_type} (node {event.node_id})"
+            elif event.node_id:
+                message = f"Executing node {event.node_id}"
+            else:
+                message = "Executing..."
         elif event.event_type == ComfyUIEventType.EXECUTION_ERROR:
             message = "ComfyUI reported an execution error; checking result status..."
         elif event.event_type == ComfyUIEventType.STATUS:

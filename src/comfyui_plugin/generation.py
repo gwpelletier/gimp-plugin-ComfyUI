@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import threading
 from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
@@ -177,7 +178,7 @@ class GenerationCoordinator:
         with self._state_lock:
             self._active_prompt_ids.add(prompt_id)
         observer_stop = threading.Event()
-        observer = self._start_websocket_observer(prompt_id, observer_stop, on_progress, on_event)
+        observer = self._start_websocket_observer(prompt_id, workflow, observer_stop, on_progress, on_event)
         try:
             images = self.client.wait_for_outputs(prompt_id, cancellation_event=cancellation_event)
         except ComfyUICancelledError as error:
@@ -197,6 +198,7 @@ class GenerationCoordinator:
     def _start_websocket_observer(
         self,
         prompt_id: str,
+        workflow: dict,
         stop_event: threading.Event,
         on_progress: Callable[[int, int], None] | None,
         on_event: Callable[[ComfyUIEvent], None] | None,
@@ -216,6 +218,10 @@ class GenerationCoordinator:
                         continue
                     if event.prompt_id not in {None, prompt_id}:
                         continue
+                    if event.node_id is not None:
+                        node = workflow.get(event.node_id)
+                        if isinstance(node, dict) and isinstance(node.get("class_type"), str):
+                            event = replace(event, node_type=node["class_type"])
                     if on_event is not None:
                         on_event(event)
                     if event.event_type == ComfyUIEventType.PROGRESS and on_progress is not None:

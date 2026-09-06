@@ -40,6 +40,8 @@ class TestGenerationCoordinator:
             ComfyUIEventType.PROGRESS,
             ComfyUIEventType.EXECUTED,
         ]
+        assert events[1].node_id == "1"
+        assert events[1].node_type == "KSampler"
 
     def test_rest_completion_survives_websocket_setup_failure(self):
         # Arrange
@@ -215,7 +217,7 @@ class EventWebSocket:
         self.event_seen = event_seen
         self.events = iter((
             ComfyUIEvent(ComfyUIEventType.PROGRESS, "job-1", value=2, maximum=10),
-            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1"),
+            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1", node_id="1"),
         ))
 
     def connect(self):

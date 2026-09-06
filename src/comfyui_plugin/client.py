@@ -67,6 +67,7 @@ class ComfyUIEvent:
     event_type: ComfyUIEventType
     prompt_id: str | None = None
     node_id: str | None = None
+    node_type: str | None = None
     value: int | None = None
     maximum: int | None = None
     data: dict | None = None
