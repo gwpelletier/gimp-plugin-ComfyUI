@@ -6,7 +6,8 @@ import sys
 import gi
 
 gi.require_version("Gimp", "3.0")
-from gi.repository import Gimp
+gi.require_version("GimpUi", "3.0")
+from gi.repository import Gimp, GimpUi
 
 from comfyui_plugin.gimp_ui import ComfyUIGenerationDialog
 
@@ -40,6 +41,7 @@ class ComfyUIPlugin(Gimp.PlugIn):
         """Open the interactive generation dialog for a GIMP image."""
         if run_mode != Gimp.RunMode.INTERACTIVE:
             return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR, None)
+        GimpUi.init("gimp-comfyui")
         dialog = ComfyUIGenerationDialog(image)
         response = dialog.run()
         dialog.destroy()

@@ -19,7 +19,14 @@ Completed and validated:
 - [x] Unit, GIMP startup, ComfyUI health, and opt-in real generation integration flows.
 - [x] Live validation against GIMP 3.2.4 and ComfyUI 0.34.0.
 
-Current validation baseline: run the default suite for fast checks; with live services configured, the complete suite currently passes 31 tests.
+Current validation baseline: run the default suite for fast checks; the current suite collects 40 tests, with external-service flows skipped unless their prerequisites are configured. The latest local baseline is 35 passed and 5 skipped.
+
+## Recent learnings
+
+- DeepWiki is connected as an upstream reference, but this repository is not indexed there yet. Treat its guidance as supplemental until verified against local fakes, configured live services, or official GIMP/ComfyUI documentation.
+- ComfyUI's global `/interrupt` and queue mutation endpoints are deprecated in favor of prompt-specific job APIs. Keep the current REST baseline for compatibility, and migrate only after versioned response schemas and tests exist.
+- GIMP 3 interactive Python plug-ins must call `GimpUi.init()` before constructing dialogs. The normal development interpreter cannot resolve `gi`; validate GIMP-facing code with the embedded GIMP runtime.
+- CI now exercises Python 3.10, 3.12, and 3.14 because the package supports Python 3.10+ while GIMP supplies the deployment interpreter.
 
 ## Priority 1: Finish the reliable generation workflow
 
@@ -114,6 +121,7 @@ Acceptance criteria:
 
 ### 8. WebSocket progress and previews
 
+- [x] Record the ComfyUI WebSocket protocol and dependency decision point in `docs/comfyui-compatibility.md`.
 - [ ] Evaluate a WebSocket implementation compatible with GIMP's embedded Python before adding a dependency.
 - [ ] Prefer a standard-library-compatible transport or explicitly package a reviewed dependency with license notices.
 - [ ] Add a client event model for `status`, `progress`, `executing`, `executed`, and `execution_error` messages.
@@ -144,6 +152,7 @@ Acceptance criteria:
 ### 11. GIMP API coverage
 
 - [ ] Add an opt-in flow that invokes the registered procedure with a real image.
+- [x] Initialize `GimpUi` before constructing the interactive dialog.
 - [ ] Verify interactive-mode behavior, dialog opening, result insertion, and parasite metadata.
 - [ ] Test on the supported GIMP 3 minor versions used by release builds.
 - [ ] Keep `gi` imports at the GIMP boundary and document expected editor diagnostics.
@@ -167,12 +176,12 @@ Acceptance criteria:
 
 ## Suggested implementation order
 
-1. Finish mask support and its GIMP integration test.
-2. Harden cancellation and temporary-file cleanup.
-3. Complete the workflow registry UI.
-4. Replace free-text model settings with dynamic selectors.
-5. Add prompt history and styles.
-6. Decide and implement the dockable panel.
+1. Run configured live inpainting and GIMP acceptance flows for Priority 1.
+2. Complete the workflow registry UI.
+3. Replace free-text model settings with dynamic selectors.
+4. Add prompt history and styles.
+5. Decide and implement the dockable panel.
+6. Migrate cancellation to the supported ComfyUI job API when version coverage is confirmed.
 7. Add WebSocket progress/previews only after dependency compatibility is resolved.
 8. Implement batch processing and export modes.
 9. Expand release and cross-platform packaging validation.

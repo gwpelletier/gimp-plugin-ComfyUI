@@ -6,7 +6,7 @@ Licensed under GPL-3.0-only. See [`docs/migration-notice.md`](docs/migration-not
 
 ## Current status
 
-The repository contains the installable plug-in boundary, ComfyUI queue/history client, workflow substitution, build/install scripts, and unit/integration test scaffolding. The dockable batch panel and image conversion pipeline are the next implementation slice.
+The repository contains the installable plug-in boundary, ComfyUI queue/history client, workflow substitution, selection masks, cancellation handling, generation metadata, build/install scripts, and unit/integration test coverage. Workflow registry UI and dynamic resource controls are the next implementation slice.
 
 ## Layout
 
@@ -17,6 +17,7 @@ The repository contains the installable plug-in boundary, ComfyUI queue/history 
 - `scripts/build.py` - creates a versioned installable plug-in archive in `dist/`.
 - `scripts/install.py` - builds and installs for the current user.
 - `CONTRIBUTING.md` - contributor workflow, validation, and build/install process.
+- `docs/comfyui-compatibility.md` - supported ComfyUI baseline, endpoint notes, and protocol migration plan.
 
 ## Contributing
 

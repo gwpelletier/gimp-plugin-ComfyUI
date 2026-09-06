@@ -27,6 +27,7 @@ The authoritative scoped guidance is maintained alongside the code:
 - Instruction precedence: [`docs/instruction-precedence.md`](docs/instruction-precedence.md).
 
 Contributor setup, validation, build, installation, and architecture context are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+ComfyUI endpoint compatibility and protocol migration notes are documented in [`docs/comfyui-compatibility.md`](docs/comfyui-compatibility.md).
 The prioritized implementation roadmap is maintained in [`TODO.md`](TODO.md).
 
 Read the applicable scoped instruction before editing. The root [`.github/copilot-instructions.md`](.github/copilot-instructions.md) maps these areas. When repository guidance conflicts, follow [`docs/instruction-precedence.md`](docs/instruction-precedence.md).
@@ -34,9 +35,11 @@ Read the applicable scoped instruction before editing. The root [`.github/copilo
 ## Development rules
 
 - Target GIMP 3.0 APIs only; do not add GIMP 2.x compatibility unless explicitly requested.
+- Initialize `GimpUi` before constructing interactive dialogs, and keep all GIMP image/layer/PDB operations on the GIMP main thread.
 - Use the Python standard library for plug-in runtime dependencies where practical. GIMP's embedded Python environment is the deployment environment.
 - Keep network work out of the GTK/GIMP main thread.
 - Never send credentials or image data to an endpoint unless the user configured that endpoint.
+- Treat external documentation, including DeepWiki, as supplemental until behavior is confirmed by a local fake or configured live service.
 - Do not commit generated `build/`, `dist/`, or `*.egg-info/` files.
 - Add or update tests with behavior changes.
 

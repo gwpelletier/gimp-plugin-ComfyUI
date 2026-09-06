@@ -94,6 +94,8 @@ Set `GIMP_PLUGIN_DIR` to use a different destination, or set `GIMP_CONFIG_DIR` a
 The bundle follows GIMP 3's Python plug-in layout: the executable `gimp-comfyui.py` is inside the same-named `gimp-comfyui/` directory. The build includes only the executable, importable runtime package, workflow templates, and `LICENSE`; generated build directories and Python bytecode are excluded.
 
 The implementation follows the [GIMP 3 Python plug-in tutorial](https://developer.gimp.org/resource/writing-a-plug-in/tutorial-python/), [GIMP 3 API reference](https://developer.gimp.org/api/3.0/), and [GIMP plug-in distribution guidance](https://developer.gimp.org/resource/distributing-plug-ins/). ComfyUI integration follows DeepWiki's [API and programmatic usage](https://deepwiki.com/Comfy-Org/ComfyUI/7-api-and-programmatic-usage), [REST API reference](https://deepwiki.com/Comfy-Org/ComfyUI/7.1-rest-api-reference), and [workflow JSON format](https://deepwiki.com/Comfy-Org/ComfyUI/7.3-workflow-json-format). The repository itself is not yet indexed on DeepWiki.
+The repository's supported endpoint baseline and planned protocol pivots are recorded in [`docs/comfyui-compatibility.md`](docs/comfyui-compatibility.md). DeepWiki is useful for upstream orientation, but local fakes and live opt-in flows remain authoritative for this client.
+GIMP-specific interactive behavior must be validated with a configured GIMP 3 integration run. In particular, verify `GimpUi.init()`, procedure invocation, dialog cancellation, result-layer insertion, parasite metadata, and cleanup; the development virtual environment cannot validate `gi` bindings.
 
 ## Change expectations
 
