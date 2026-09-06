@@ -42,8 +42,8 @@ Current validation baseline: run the default suite for fast checks; the current 
 - [x] Add an opt-in GIMP integration flow that creates a selection, exports a mask, and verifies cleanup.
 - [x] Run `workflows/inpainting-api.json` against a configured ComfyUI instance and mask-capable checkpoint before marking complete.
 
-Implementation status: mask export, workflow injection, generation plumbing, automated tests, and live inpainting validation are complete. The interactive GIMP acceptance validation remains pending.
-Staging: `test/integration/test_comfyui_inpainting_flow.py` automates the live check when `COMFYUI_MASK_WORKFLOW`, `COMFYUI_TEST_IMAGE`, `COMFYUI_TEST_MASK`, `COMFYUI_CHECKPOINT`, and `COMFYUI_URL` are provided. Operator steps are documented in [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
+Implementation status: mask export, workflow injection, generation plumbing, automated tests, live inpainting validation, and interactive GIMP acceptance are complete.
+Staging: `test/integration/test_comfyui_inpainting_flow.py` automates the live check when `COMFYUI_MASK_WORKFLOW`, `COMFYUI_TEST_IMAGE`, `COMFYUI_TEST_MASK`, `COMFYUI_CHECKPOINT`, and `COMFYUI_URL` are provided.
 
 Acceptance criteria:
 
@@ -60,8 +60,7 @@ Acceptance criteria:
 - [x] Add tests for cancellation before queueing, during polling, and after completion.
 - [x] Add opt-in ComfyUI integration coverage that starts a longer job, cancels it, and verifies no outputs are returned.
 
-Implementation status: cancellation state, interrupt handling, active prompt tracking, cleanup, unit coverage, and an opt-in real-ComfyUI cancellation flow are complete. The UI-level no-result-layer assertion remains covered by the coordinator guard and should be exercised during a configured GIMP acceptance run.
-Staging: the manual GIMP procedure, cancellation, metadata, and cleanup checklist is documented in [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
+Implementation status: cancellation state, interrupt handling, active prompt tracking, cleanup, unit coverage, and an opt-in real-ComfyUI cancellation flow are complete. The UI-level no-result-layer assertion remains covered by the coordinator guard and is exercised during configured GIMP acceptance runs.
 
 Acceptance criteria:
 
@@ -184,7 +183,7 @@ Implementation status: the dialog offers layer, new-image, and export-directory 
 - [x] Test on the supported GIMP 3 minor versions used by release builds.
 - [x] Keep `gi` imports at the GIMP boundary and document expected editor diagnostics.
 
-Implementation status: the opt-in GIMP process flows cover registration, real-image procedure invocation, startup, insertion, metadata, export reopen, and persistence. The current release validation target is GIMP 3.2.4; interactive manual steps are recorded in [`docs/priority-4-acceptance.md`](docs/priority-4-acceptance.md).
+Implementation status: the opt-in GIMP process flows cover registration, real-image procedure invocation, startup, insertion, metadata, export reopen, and persistence. The current release validation target is GIMP 3.2.4.
 
 ### 12. ComfyUI compatibility
 
