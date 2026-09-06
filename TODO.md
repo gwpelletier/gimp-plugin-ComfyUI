@@ -26,7 +26,7 @@ Current validation baseline: run the default suite for fast checks; the current 
 - DeepWiki is connected as an upstream reference, but this repository is not indexed there yet. Treat its guidance as supplemental until verified against local fakes, configured live services, or official GIMP/ComfyUI documentation.
 - ComfyUI's global `/interrupt` and queue mutation endpoints are deprecated in favor of prompt-specific job APIs. Keep the current REST baseline for compatibility, and migrate only after versioned response schemas and tests exist.
 - GIMP 3 interactive Python plug-ins must call `GimpUi.init()` before constructing dialogs. The normal development interpreter cannot resolve `gi`; validate GIMP-facing code with the embedded GIMP runtime.
-- CI now exercises Python 3.10, 3.12, and 3.14 because the package supports Python 3.10+ while GIMP supplies the deployment interpreter.
+- CI now exercises the Python 3.10 minimum and 3.12 primary development runtime. A remote Python 3.14 Actions job failed with an opaque pytest exit code despite passing locally, so 3.14 remains a local compatibility check until that runner-specific failure is reproducible.
 
 ## Priority 1: Finish the reliable generation workflow
 
