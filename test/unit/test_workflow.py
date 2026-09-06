@@ -7,7 +7,53 @@ from comfyui_plugin.workflow import (
     apply_mask,
     apply_parameters,
     load_workflow,
+    validate_workflow_compatibility,
 )
+
+
+class TestValidateWorkflowCompatibility:
+    def test_rejects_missing_node_from_object_info(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CustomNode", "inputs": {}}}
+
+        # Act
+        with pytest.raises(WorkflowError, match="unavailable node"):
+            validate_workflow_compatibility(workflow, {})
+
+        # Assert
+        assert workflow["1"]["class_type"] == "CustomNode"
+
+    def test_rejects_unsupported_input_and_resource_value(self):
+        # Arrange
+        workflow = {
+            "1": {
+                "class_type": "KSampler",
+                "inputs": {"sampler_name": "missing", "unknown": 1},
+            }
+        }
+        object_info = {
+            "KSampler": {
+                "input": {"required": {"sampler_name": [["euler"]]}, "optional": {}}
+            }
+        }
+
+        # Act
+        with pytest.raises(WorkflowError, match="unsupported|unavailable"):
+            validate_workflow_compatibility(workflow, object_info)
+
+        # Assert
+        assert workflow["1"]["inputs"]["sampler_name"] == "missing"
+
+    def test_accepts_legacy_image_upload_hint(self):
+        # Arrange
+        workflow = {"1": {"class_type": "LoadImage", "inputs": {"image": "input.png", "upload": "image"}}}
+        object_info = {"LoadImage": {"input": {"required": {"image": [["input.png"]]}}}}
+
+        # Act
+        validate_workflow_compatibility(workflow, object_info)
+
+        # Assert
+        assert workflow["1"]["inputs"]["upload"] == "image"
 
 
 class TestApplyParameters:

@@ -218,6 +218,12 @@ class ComfyUIClient:
         """Return scheduler names advertised by the ComfyUI node schema."""
         return self.get_node_input_options("KSampler", "scheduler")
 
+    def validate_workflow(self, workflow: dict) -> None:
+        """Validate a workflow against the current ComfyUI node schema."""
+        from .workflow import validate_workflow_compatibility
+
+        validate_workflow_compatibility(workflow, self.get_object_info())
+
     def queue_prompt(self, workflow: dict) -> str:
         """Queue an API-format workflow and return its prompt identifier.
 

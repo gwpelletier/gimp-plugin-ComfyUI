@@ -168,28 +168,34 @@ Implementation status: the dialog offers layer, new-image, and export-directory 
 
 ### 11. GIMP API coverage
 
-- [ ] Add an opt-in flow that invokes the registered procedure with a real image.
+- [x] Add an opt-in flow that invokes the registered procedure with a real image.
 - [x] Initialize `GimpUi` before constructing the interactive dialog.
-- [ ] Verify interactive-mode behavior, dialog opening, result insertion, and parasite metadata.
-- [ ] Test on the supported GIMP 3 minor versions used by release builds.
-- [ ] Keep `gi` imports at the GIMP boundary and document expected editor diagnostics.
+- [x] Verify interactive-mode behavior, dialog opening, result insertion, and parasite metadata.
+- [x] Test on the supported GIMP 3 minor versions used by release builds.
+- [x] Keep `gi` imports at the GIMP boundary and document expected editor diagnostics.
+
+Implementation status: the opt-in GIMP process flows cover registration, real-image procedure invocation, startup, insertion, metadata, export reopen, and persistence. The current release validation target is GIMP 3.2.4; interactive manual steps are recorded in [`docs/priority-4-acceptance.md`](docs/priority-4-acceptance.md).
 
 ### 12. ComfyUI compatibility
 
-- [ ] Test against the supported ComfyUI API endpoints and record the minimum known version.
-- [ ] Add workflow compatibility checks for missing nodes and unsupported inputs.
-- [ ] Verify checkpoint, sampler, scheduler, LoRA, VAE, and mask names against `/object_info`.
-- [ ] Add clear errors for custom-node workflows whose nodes are unavailable.
-- [ ] Keep the live generation integration test opt-in to avoid accidental GPU use in CI.
+- [x] Test against the supported ComfyUI API endpoints and record the minimum known version.
+- [x] Add workflow compatibility checks for missing nodes and unsupported inputs.
+- [x] Verify checkpoint, sampler, scheduler, LoRA, VAE, and mask names against `/object_info`.
+- [x] Add clear errors for custom-node workflows whose nodes are unavailable.
+- [x] Keep the live generation integration test opt-in to avoid accidental GPU use in CI.
+
+Implementation status: ComfyUI 0.34.0 is the validated baseline. `/object_info` compatibility validation rejects unavailable nodes, inputs, and resource values while preserving the known legacy image-upload hint.
 
 ### 13. Packaging and licensing
 
-- [ ] Add a release manifest test for executable layout, workflow files, `LICENSE`, and no bytecode.
-- [ ] Keep the package version single-sourced.
-- [ ] Review any future dependency against GPL compatibility and include its license notices.
-- [ ] Confirm GIMP 3.x per-user installation paths on Linux, macOS, Windows, Flatpak, and AppImage.
-- [ ] Add a release checklist to `CONTRIBUTING.md`.
-- [ ] Do not include development virtual environments, generated builds, or vendored unrelated packages.
+- [x] Add a release manifest test for executable layout, workflow files, `LICENSE`, and no bytecode.
+- [x] Keep the package version single-sourced.
+- [x] Review any future dependency against GPL compatibility and include its license notices.
+- [x] Confirm GIMP 3.x per-user installation paths on Linux, macOS, Windows, Flatpak, and AppImage.
+- [x] Add a release checklist to `CONTRIBUTING.md`.
+- [x] Do not include development virtual environments, generated builds, or vendored unrelated packages.
+
+Implementation status: manifest and version tests pass, runtime dependencies remain standard-library-only, installation paths are covered for the supported platform branches, and the build excludes bytecode and development artifacts.
 
 ## Suggested implementation order
 

@@ -46,6 +46,43 @@ def validate_api_workflow(workflow: dict[str, Any]) -> None:
             raise WorkflowError(f"Workflow node {node_id!r} is missing inputs")
 
 
+def validate_workflow_compatibility(
+    workflow: dict[str, Any],
+    object_info: dict[str, Any],
+) -> None:
+    """Reject workflows that reference unavailable nodes or inputs.
+
+    ``object_info`` is the schema returned by ComfyUI. Enumerated resource
+    values are checked when the server advertises a concrete option list.
+    """
+    validate_api_workflow(workflow)
+    problems = []
+    for node_id, node in workflow.items():
+        class_type = node["class_type"]
+        schema = object_info.get(class_type)
+        if not isinstance(schema, dict):
+            problems.append(f"{node_id} uses unavailable node {class_type}")
+            continue
+        schema_inputs = {}
+        for section in ("required", "optional"):
+            schema_inputs.update(schema.get("input", {}).get(section, {}))
+        for input_name, value in node["inputs"].items():
+            if input_name not in schema_inputs:
+                if class_type in {"LoadImage", "LoadImageMask"} and input_name == "upload":
+                    continue
+                problems.append(f"{node_id}.{input_name} is unsupported by {class_type}")
+                continue
+            if isinstance(value, list):
+                continue
+            definition = schema_inputs[input_name]
+            if isinstance(definition, list) and definition and isinstance(definition[0], list):
+                options = definition[0]
+                if value not in options and not (isinstance(value, str) and value.startswith("{{")):
+                    problems.append(f"{node_id}.{input_name} value {value!r} is unavailable")
+    if problems:
+        raise WorkflowError("Workflow is incompatible with ComfyUI: " + "; ".join(problems))
+
+
 def load_workflow(path: str | Path) -> dict[str, Any]:
     """Load a JSON workflow object from disk.
 
