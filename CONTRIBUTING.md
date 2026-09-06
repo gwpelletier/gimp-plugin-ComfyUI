@@ -62,6 +62,14 @@ python -m pytest -m integration
 
 Integration prerequisites are skipped with an actionable message when their environment variables are absent.
 
+On a development machine with GIMP and ComfyUI running locally, use the integration runner to discover them automatically:
+
+```sh
+python scripts/run_integration.py
+```
+
+The runner uses `gimp` or `gimp-console` from `PATH`, probes `http://127.0.0.1:8188`, and exports `GIMP_BIN` and `COMFYUI_URL` for pytest. Override either value with `--gimp-bin` or `--comfyui-url`; additional arguments are passed through to pytest.
+
 For the opt-in real generation flow, also set `COMFYUI_TEST_IMAGE` and `COMFYUI_CHECKPOINT`:
 
 ```sh
