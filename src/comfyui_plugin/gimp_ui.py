@@ -57,38 +57,37 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         content.pack_start(grid, True, True, 0)
 
         self.endpoint = self._add_entry(grid, 0, "ComfyUI URL", "http://127.0.0.1:8188")
-        self.mode = self._add_combo(grid, 1, "Mode", ["Image Edit", "Inpainting"], "Image Edit")
+        self.mode, self.checkpoint, self.checkpoint_type = self._add_mode_and_checkpoint_controls(grid, 1)
         self.mode.connect("changed", self._on_mode_changed)
         self.workflow_selector = self._add_workflow_selector(grid, 2)
         self._ensure_default_workflows()
         self._refresh_workflow_selector()
         self.prompt = self._add_entry(grid, 3, "Prompt", "")
         self.negative_prompt = self._add_entry(grid, 4, "Negative prompt", "")
-        self.checkpoint, self.checkpoint_type = self._add_checkpoint_controls(grid, 5)
-        self.unet = self._add_searchable_combo(grid, 6, "UNET")
-        self.clip_l = self._add_searchable_combo(grid, 7, "Flux CLIP L")
-        self.clip_t5 = self._add_searchable_combo(grid, 8, "Flux T5")
-        self.krea_model = self._add_searchable_combo(grid, 9, "Krea 2 model")
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 10)
-        self.vae = self._add_searchable_combo(grid, 11, "VAE")
+        self.unet = self._add_searchable_combo(grid, 5, "UNET")
+        self.clip_l = self._add_searchable_combo(grid, 6, "Flux CLIP L")
+        self.clip_t5 = self._add_searchable_combo(grid, 7, "Flux T5")
+        self.krea_model = self._add_searchable_combo(grid, 8, "Krea 2 model")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 9)
+        self.vae = self._add_searchable_combo(grid, 10, "VAE")
         self._update_vae_support()
-        self.steps = self._add_spin(grid, 12, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 13, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 14, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 15, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 16, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 17, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.steps = self._add_spin(grid, 11, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 12, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 13, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 14, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 15, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 16, "Scheduler", ["normal", "karras", "simple"], "normal")
         self._profile_defaults = {"steps": 20, "cfg": 8.0, "denoise": 1.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
-            18,
+            17,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
-        self.output_directory = self._add_entry(grid, 19, "Export directory", "")
+        self.output_directory = self._add_entry(grid, 18, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 20, 2, 1)
+        grid.attach(self.status, 0, 19, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -152,19 +151,22 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         return selector
 
     @staticmethod
-    def _add_searchable_combo(grid: Gtk.Grid, row: int, label_text: str) -> Gtk.ComboBoxText:
-        label = Gtk.Label(label=label_text, xalign=0)
-        combo = Gtk.ComboBoxText.new_with_entry()
-        combo.set_hexpand(True)
-        combo._label_widget = label
-        grid.attach(label, 0, row, 1, 1)
-        grid.attach(combo, 1, row, 1, 1)
-        return combo
+    def _add_mode_and_checkpoint_controls(grid: Gtk.Grid, row: int):
+        row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
-    @staticmethod
-    def _add_checkpoint_controls(grid: Gtk.Grid, row: int):
-        label = Gtk.Label(label="Checkpoint / family", xalign=0)
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        mode_label = Gtk.Label(label="Mode", xalign=0)
+        mode = Gtk.ComboBoxText()
+        for option in ("Image Edit", "Inpainting"):
+            mode.append_text(option)
+        mode.set_active(0)
+        mode.set_hexpand(True)
+        mode_box.pack_start(mode_label, False, False, 0)
+        mode_box.pack_start(mode, False, False, 0)
+
+        checkpoint_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        checkpoint_label = Gtk.Label(label="Checkpoint / family", xalign=0)
+        checkpoint_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         checkpoint = Gtk.ComboBoxText.new_with_entry()
         checkpoint.set_hexpand(True)
         profile = Gtk.ComboBoxText()
@@ -178,11 +180,25 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             profile.append_text(checkpoint_type.value)
         profile.set_active(0)
         profile.set_tooltip_text("Filter workflows and choose family-specific model resources")
-        box.pack_start(checkpoint, True, True, 0)
-        box.pack_start(profile, False, False, 0)
+        checkpoint_controls.pack_start(checkpoint, True, True, 0)
+        checkpoint_controls.pack_start(profile, False, False, 0)
+        checkpoint_box.pack_start(checkpoint_label, False, False, 0)
+        checkpoint_box.pack_start(checkpoint_controls, False, False, 0)
+
+        row_box.pack_start(mode_box, True, True, 0)
+        row_box.pack_start(checkpoint_box, True, True, 0)
+        grid.attach(row_box, 0, row, 2, 1)
+        return mode, checkpoint, profile
+
+    @staticmethod
+    def _add_searchable_combo(grid: Gtk.Grid, row: int, label_text: str) -> Gtk.ComboBoxText:
+        label = Gtk.Label(label=label_text, xalign=0)
+        combo = Gtk.ComboBoxText.new_with_entry()
+        combo.set_hexpand(True)
+        combo._label_widget = label
         grid.attach(label, 0, row, 1, 1)
-        grid.attach(box, 1, row, 1, 1)
-        return checkpoint, profile
+        grid.attach(combo, 1, row, 1, 1)
+        return combo
 
     def _add_lora_controls(self, grid: Gtk.Grid, row: int):
         label = Gtk.Label(label="LoRAs", xalign=0)
@@ -451,8 +467,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         selected = self.workflow_selector.get_active_id()
         if not selected:
             for control in (self.checkpoint, self.unet, self.clip_l, self.clip_t5, self.krea_model):
-                self._set_control_visibility(control, False)
                 control.set_sensitive(False)
+            self._set_control_visibility(self.checkpoint, True)
             return
         try:
             workflow = load_workflow(selected)
@@ -468,7 +484,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         )
         show_flux_resources = family == CheckpointType.FLUX
         show_krea_resource = family == CheckpointType.KREA2 and "Krea2ImageNode" in classes
-        self._set_control_visibility(self.checkpoint, show_checkpoint)
+        self._set_control_visibility(self.checkpoint, True)
         self._set_control_visibility(self.unet, show_flux_resources and "UNETLoader" in classes)
         self._set_control_visibility(self.clip_l, show_flux_resources and "DualCLIPLoader" in classes)
         self._set_control_visibility(self.clip_t5, show_flux_resources and "DualCLIPLoader" in classes)
