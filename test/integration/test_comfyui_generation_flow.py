@@ -24,7 +24,7 @@ class TestComfyUIGenerationFlow:
         client = ComfyUIClient(os.environ["COMFYUI_URL"], timeout=60)
         input_path = Path(os.environ["COMFYUI_TEST_IMAGE"])
         upload = client.upload_image(input_path, subfolder="gimp-comfyui-test")
-        workflow = load_workflow("workflows/image-edit-api.json")
+        workflow = load_workflow("workflows/sdxl-image-edit-api.json")
         input_name = "/".join(part for part in (upload.subfolder, upload.filename) if part)
         request = GenerationRequest(
             workflow=workflow,

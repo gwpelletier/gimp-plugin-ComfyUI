@@ -219,6 +219,15 @@ class ComfyUIClient:
         """Return dual-CLIP resource names advertised by ComfyUI."""
         return self.get_node_input_options("DualCLIPLoader", "clip_name1")
 
+    def get_available_krea_models(self) -> list[str]:
+        """Return hosted Krea2 model names advertised by the custom node."""
+        try:
+            definition = self.get_object_info()["Krea2ImageNode"]["input"]["required"]["model"]
+            options = definition[1].get("options", [])
+            return [item["key"] for item in options if isinstance(item, dict) and isinstance(item.get("key"), str)]
+        except (KeyError, IndexError, TypeError, AttributeError):
+            return []
+
     def get_available_samplers(self) -> list[str]:
         """Return sampler names advertised by the ComfyUI node schema."""
         return self.get_node_input_options("KSampler", "sampler_name")

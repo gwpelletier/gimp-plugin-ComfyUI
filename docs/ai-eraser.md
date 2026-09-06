@@ -10,4 +10,4 @@ The AI Eraser uses GIMP's local brush workflow and ComfyUI's inpainting workflow
 
 The selection is exported as a temporary mask, sent with the image to ComfyUI, and restored results are inserted as a new layer by default. The source image and selection are not modified. This is a deferred AI operation: brush strokes remain local and only the committed erase invokes ComfyUI.
 
-The eraser requires a workflow with a compatible mask input, such as the bundled `workflows/inpainting-api.json`.
+The eraser requires a workflow with a compatible mask input, such as the bundled `workflows/sdxl-inpainting-api.json`.

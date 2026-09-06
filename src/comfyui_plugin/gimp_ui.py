@@ -303,8 +303,6 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         """Register the workflows shipped with the plug-in."""
         workflow_directory = Path(__file__).resolve().parents[2] / "workflows"
         self.workflow_registry.add([
-            workflow_directory / "image-edit-api.json",
-            workflow_directory / "inpainting-api.json",
             workflow_directory / "sdxl-image-edit-api.json",
             workflow_directory / "sdxl-inpainting-api.json",
             workflow_directory / "flux-image-edit-api.json",
@@ -315,7 +313,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         """Select the bundled inpainting workflow and eraser prompt."""
         workflows = self.workflow_registry.list()
         inpainting = next(
-            (item["path"] for item in workflows if Path(item["path"]).name == "inpainting-api.json"),
+            (item["path"] for item in workflows if Path(item["path"]).name == "sdxl-inpainting-api.json"),
             None,
         )
         if inpainting:

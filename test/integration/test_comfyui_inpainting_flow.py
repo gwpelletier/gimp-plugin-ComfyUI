@@ -11,7 +11,7 @@ from comfyui_plugin.workflow import load_workflow
 pytestmark = pytest.mark.integration
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_WORKFLOW = REPOSITORY_ROOT / "workflows" / "inpainting-api.json"
+DEFAULT_WORKFLOW = REPOSITORY_ROOT / "workflows" / "sdxl-inpainting-api.json"
 DEFAULT_SOURCE_IMAGE = REPOSITORY_ROOT / "test" / "fixtures" / "priority-1" / "source.png"
 DEFAULT_MASK_IMAGE = REPOSITORY_ROOT / "test" / "fixtures" / "priority-1" / "mask.png"
 

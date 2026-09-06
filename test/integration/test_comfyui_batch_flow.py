@@ -24,7 +24,7 @@ class TestComfyUIBatchFlow:
     def test_processes_two_inputs_and_returns_two_outputs(self):
         # Arrange
         client = ComfyUIClient(os.environ["COMFYUI_URL"], timeout=60)
-        workflow = load_workflow("workflows/image-edit-api.json")
+        workflow = load_workflow("workflows/sdxl-image-edit-api.json")
         requests = []
         for index, environment_name in enumerate(("COMFYUI_TEST_IMAGE", "COMFYUI_TEST_IMAGE_2")):
             upload = client.upload_image(Path(os.environ[environment_name]), subfolder="gimp-comfyui-batch")

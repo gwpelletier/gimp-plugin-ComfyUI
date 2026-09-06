@@ -126,6 +126,21 @@ class TestComfyUIClient:
         # Assert
         assert options == []
 
+    def test_reads_dynamic_krea_model_options(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(
+            client,
+            "get_object_info",
+            lambda: {"Krea2ImageNode": {"input": {"required": {"model": ["DYNAMIC", {"options": [{"key": "Krea 2 Medium"}, {"key": "Krea 2 Large"}]}]}}}},
+        )
+
+        # Act
+        models = client.get_available_krea_models()
+
+        # Assert
+        assert models == ["Krea 2 Medium", "Krea 2 Large"]
+
     def test_upload_image_returns_server_reference(self, comfyui_server, tmp_path):
         # Arrange
         image_path = tmp_path / "source.png"

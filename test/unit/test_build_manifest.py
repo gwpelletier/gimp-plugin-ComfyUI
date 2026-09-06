@@ -29,8 +29,6 @@ class TestBuildManifest:
             names = set(archive.namelist())
             assert "gimp-comfyui/gimp-comfyui.py" in names
             assert "gimp-comfyui/comfyui_plugin/client.py" in names
-            assert "gimp-comfyui/workflows/image-edit-api.json" in names
-            assert "gimp-comfyui/workflows/inpainting-api.json" in names
             assert "gimp-comfyui/workflows/sdxl-image-edit-api.json" in names
             assert "gimp-comfyui/workflows/sdxl-inpainting-api.json" in names
             assert "gimp-comfyui/workflows/flux-image-edit-api.json" in names

@@ -13,8 +13,9 @@ ComfyUI's standard `/object_info` response advertises checkpoint names but does 
 
 The bundled workflow families are:
 
-- Classic checkpoint graphs: `image-edit-api.json` and `inpainting-api.json`.
 - SDXL graphs: `sdxl-image-edit-api.json` and `sdxl-inpainting-api.json`.
 - Flux graphs: `flux-image-edit-api.json` and `flux-inpainting-api.json`.
+
+Krea2 is available from the live instance through the `Krea2ImageNode` custom node. It is a hosted text-to-image service with dynamic models such as Krea 2 Medium, Medium Turbo, and Large, rather than a local checkpoint workflow. It requires ComfyUI-side credentials and does not currently support the plug-in's image-edit or mask contract, so it is intentionally not bundled in the image-edit/eraser registry.
 
 Flux profiles require `UNETLoader` and `DualCLIPLoader`; SDXL profiles require `CLIPTextEncodeSDXL`. The dialog rejects a family/workflow mismatch before queueing.

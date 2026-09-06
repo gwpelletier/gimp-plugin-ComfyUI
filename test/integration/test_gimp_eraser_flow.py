@@ -27,7 +27,7 @@ class TestGimpEraserFlow:
                 "image = Gimp.Image.new(32, 32, Gimp.ImageBaseType.RGB)",
                 "Gimp.Image.select_rectangle(image, Gimp.ChannelOps.REPLACE, 4, 4, 12, 12)",
                 "dialog = ComfyUIGenerationDialog(image, eraser_mode=True)",
-                "assert dialog.workflow_selector.get_active_id().endswith('inpainting-api.json')",
+                "assert dialog.workflow_selector.get_active_id().endswith('sdxl-inpainting-api.json')",
                 "assert dialog.prompt.get_text().startswith('Remove the selected object')",
                 "assert not Gimp.Selection.is_empty(image)",
                 "dialog.destroy()",
