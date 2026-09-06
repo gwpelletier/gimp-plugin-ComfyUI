@@ -56,6 +56,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.checkpoint = self._add_searchable_combo(grid, 4, "Checkpoint")
         self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 5)
         self.vae = self._add_searchable_combo(grid, 6, "VAE")
+        self._update_vae_support()
         self.steps = self._add_spin(grid, 7, "Steps", 20, 1, 200, 1)
         self.cfg = self._add_spin(grid, 8, "CFG", 8.0, 1.0, 30.0, 0.5)
         self.denoise = self._add_spin(grid, 9, "Denoise", 1.0, 0.0, 1.0, 0.05)
@@ -278,6 +279,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._update_vae_support()
 
     def _update_vae_support(self) -> None:
+        if not hasattr(self, "vae"):
+            return
         selected = self.workflow_selector.get_active_id()
         if not selected:
             self.vae.set_sensitive(False)
