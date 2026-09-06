@@ -7,14 +7,36 @@ on:
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .github/release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v7
+        if: steps.release.outputs.release_created == 'true'
+      - uses: actions/setup-python@v7
+        if: steps.release.outputs.release_created == 'true'
+        with:
+          python-version: "3.12"
+      - name: Build release archive
+        if: steps.release.outputs.release_created == 'true'
+        run: python scripts/build.py
+      - name: Upload release archive
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/*.zip --clobber
