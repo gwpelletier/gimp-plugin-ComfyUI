@@ -20,6 +20,7 @@ from .export import ExportError, ImageExporter
 from .resources import (
     CheckpointType,
     checkpoint_profile,
+    infer_checkpoint_type,
     validate_checkpoint_workflow,
     workflow_matches_checkpoint_type,
     workflow_supports_vae,
@@ -155,6 +156,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         label = Gtk.Label(label=label_text, xalign=0)
         combo = Gtk.ComboBoxText.new_with_entry()
         combo.set_hexpand(True)
+        combo._label_widget = label
         grid.attach(label, 0, row, 1, 1)
         grid.attach(combo, 1, row, 1, 1)
         return combo
@@ -166,7 +168,13 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         checkpoint = Gtk.ComboBoxText.new_with_entry()
         checkpoint.set_hexpand(True)
         profile = Gtk.ComboBoxText()
-        for checkpoint_type in CheckpointType:
+        for checkpoint_type in (
+            CheckpointType.AUTO,
+            CheckpointType.KREA2,
+            CheckpointType.FLUX,
+            CheckpointType.SDXL,
+            CheckpointType.SD15,
+        ):
             profile.append_text(checkpoint_type.value)
         profile.set_active(0)
         profile.set_tooltip_text("Filter workflows and choose family-specific model resources")
@@ -426,11 +434,15 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             return
         selected = self.workflow_selector.get_active_id()
         if not selected:
+            self._set_control_visibility(self.vae, False)
             self.vae.set_sensitive(False)
             return
         try:
-            self.vae.set_sensitive(workflow_supports_vae(load_workflow(selected)))
+            has_vae = workflow_supports_vae(load_workflow(selected))
+            self._set_control_visibility(self.vae, has_vae)
+            self.vae.set_sensitive(has_vae)
         except Exception:
+            self._set_control_visibility(self.vae, False)
             self.vae.set_sensitive(False)
 
     def _update_model_resource_support(self) -> None:
@@ -439,6 +451,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         selected = self.workflow_selector.get_active_id()
         if not selected:
             for control in (self.checkpoint, self.unet, self.clip_l, self.clip_t5, self.krea_model):
+                self._set_control_visibility(control, False)
                 control.set_sensitive(False)
             return
         try:
@@ -446,11 +459,32 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
         except (OSError, ValueError):
             classes = set()
-        self.checkpoint.set_sensitive(bool({"CheckpointLoader", "CheckpointLoaderSimple"} & classes))
-        self.unet.set_sensitive("UNETLoader" in classes)
-        self.clip_l.set_sensitive("DualCLIPLoader" in classes)
-        self.clip_t5.set_sensitive("DualCLIPLoader" in classes)
-        self.krea_model.set_sensitive("Krea2ImageNode" in classes)
+            workflow = {}
+        family = self._selected_checkpoint_type()
+        if family == CheckpointType.AUTO:
+            family = infer_checkpoint_type(workflow)
+        show_checkpoint = family in {CheckpointType.SDXL, CheckpointType.SD15} and bool(
+            {"CheckpointLoader", "CheckpointLoaderSimple"} & classes
+        )
+        show_flux_resources = family == CheckpointType.FLUX
+        show_krea_resource = family == CheckpointType.KREA2 and "Krea2ImageNode" in classes
+        self._set_control_visibility(self.checkpoint, show_checkpoint)
+        self._set_control_visibility(self.unet, show_flux_resources and "UNETLoader" in classes)
+        self._set_control_visibility(self.clip_l, show_flux_resources and "DualCLIPLoader" in classes)
+        self._set_control_visibility(self.clip_t5, show_flux_resources and "DualCLIPLoader" in classes)
+        self._set_control_visibility(self.krea_model, show_krea_resource)
+        self.checkpoint.set_sensitive(show_checkpoint)
+        self.unet.set_sensitive(show_flux_resources and "UNETLoader" in classes)
+        self.clip_l.set_sensitive(show_flux_resources and "DualCLIPLoader" in classes)
+        self.clip_t5.set_sensitive(show_flux_resources and "DualCLIPLoader" in classes)
+        self.krea_model.set_sensitive(show_krea_resource)
+
+    @staticmethod
+    def _set_control_visibility(control: Gtk.Widget, is_visible: bool) -> None:
+        control.set_visible(is_visible)
+        label = getattr(control, "_label_widget", None)
+        if label is not None:
+            label.set_visible(is_visible)
 
     def _choose_workflows(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserDialog(
