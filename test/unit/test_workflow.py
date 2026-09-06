@@ -180,3 +180,30 @@ class TestApplyMask:
         # Assert
         assert workflow["1"]["inputs"]["mask"] == "old-mask"
         assert updated["1"]["inputs"]["mask"] == ["2", 0]
+
+    def test_bundled_inpainting_workflow_is_mask_compatible(self):
+        # Arrange
+        workflow = load_workflow("workflows/inpainting-api.json")
+
+        # Act
+        updated = apply_generation_parameters(
+            workflow,
+            input_image="uploads/source.png",
+            mask_image="uploads/mask.png",
+            positive_prompt="restore the selected area",
+            negative_prompt="blurry",
+            checkpoint="models/checkpoint.safetensors",
+            seed=42,
+            steps=6,
+            cfg=7,
+            sampler="euler",
+            scheduler="normal",
+            denoise=0.65,
+        )
+
+        # Assert
+        assert updated["6"]["inputs"]["mask"] == ["10", 0]
+        assert updated["10"] == {
+            "class_type": "LoadImageMask",
+            "inputs": {"image": "uploads/mask.png", "channel": "green", "upload": "image"},
+        }

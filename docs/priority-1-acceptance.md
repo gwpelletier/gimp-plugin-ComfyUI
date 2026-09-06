@@ -4,7 +4,7 @@ The automated unit suite and local GIMP boundary flow are complete. These live c
 
 ## ComfyUI inpainting
 
-Prepare an API-format workflow exported from the ComfyUI UI that:
+The repository now includes `workflows/inpainting-api.json`, a plugin-native API-format workflow based on the source project's `SetLatentNoiseMask` approach. It uses a separately uploaded mask through this plugin's `LoadImageMask` injection. You may start with that template or provide another API-format workflow that:
 
 - Loads the source image through a `LoadImage` node.
 - Has at least one node input named `mask`, such as `VAEEncodeForInpaint` or `SetLatentNoiseMask`.
@@ -15,7 +15,7 @@ Run:
 
 ```sh
 COMFYUI_URL=http://127.0.0.1:8188 \
-COMFYUI_MASK_WORKFLOW=/path/to/inpainting-api-workflow.json \
+COMFYUI_MASK_WORKFLOW=workflows/inpainting-api.json \
 COMFYUI_TEST_IMAGE=/path/to/source.png \
 COMFYUI_TEST_MASK=/path/to/mask.png \
 COMFYUI_CHECKPOINT=path/to/checkpoint.safetensors \

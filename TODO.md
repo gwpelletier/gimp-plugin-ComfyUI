@@ -40,7 +40,7 @@ Current validation baseline: run the default suite for fast checks; the current 
 - [x] Reject mask requests when the workflow has no compatible mask input.
 - [x] Add unit tests for mask-node injection, missing mask inputs, and template immutability.
 - [x] Add an opt-in GIMP integration flow that creates a selection, exports a mask, and verifies cleanup.
-- [ ] Run a real ComfyUI inpainting workflow using a configured mask-capable checkpoint before marking complete.
+- [ ] Run `workflows/inpainting-api.json` against a configured ComfyUI instance and mask-capable checkpoint before marking complete.
 
 Implementation status: mask export, workflow injection, generation plumbing, and automated tests are complete. The live inpainting validation remains pending until a mask-capable ComfyUI workflow and checkpoint are configured.
 Staging: `test/integration/test_comfyui_inpainting_flow.py` automates the live check when `COMFYUI_MASK_WORKFLOW`, `COMFYUI_TEST_IMAGE`, `COMFYUI_TEST_MASK`, `COMFYUI_CHECKPOINT`, and `COMFYUI_URL` are provided. Operator steps are documented in [`docs/priority-1-acceptance.md`](docs/priority-1-acceptance.md).
