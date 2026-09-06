@@ -365,6 +365,14 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.status.set_text(f"Using defaults: {message}")
         return False
 
+    def _set_worker_status(self, message: str) -> None:
+        """Schedule a worker status message on GTK's main thread."""
+        GLib.idle_add(self._apply_worker_status, message)
+
+    def _apply_worker_status(self, message: str) -> bool:
+        self.status.set_text(message)
+        return False
+
     @staticmethod
     def _add_spin(grid: Gtk.Grid, row: int, label_text: str, value: float, lower: float, upper: float, step: float):
         label = Gtk.Label(label=label_text, xalign=0)
@@ -455,14 +463,17 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         try:
             uploaded_name = None
             if input_path is not None:
+                self._set_worker_status("Uploading input image...")
                 uploaded = client.upload_image(input_path, subfolder="gimp_uploads")
                 uploaded_name = "/".join(part for part in (uploaded.subfolder, uploaded.filename) if part)
             uploaded_mask_name = None
             if mask_path is not None:
+                self._set_worker_status("Uploading selection mask...")
                 uploaded_mask = client.upload_image(mask_path, subfolder="gimp_uploads")
                 uploaded_mask_name = "/".join(
                     part for part in (uploaded_mask.subfolder, uploaded_mask.filename) if part
                 )
+            self._set_worker_status("Generating with ComfyUI...")
             result = coordinator.run(
                 GenerationRequest(
                     workflow=workflow,
@@ -483,6 +494,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             )
             if not result.images:
                 raise RuntimeError("ComfyUI completed without an image output")
+            self._set_worker_status("Downloading results...")
             output_paths = []
             for image_index, image in enumerate(result.images):
                 output = client.view_image(image)
