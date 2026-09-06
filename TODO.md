@@ -27,7 +27,7 @@ Current validation baseline: run the default suite for fast checks; the current 
 - ComfyUI's global `/interrupt` and queue mutation endpoints are deprecated in favor of prompt-specific job APIs. Keep the current REST baseline for compatibility, and migrate only after versioned response schemas and tests exist.
 - GIMP 3 interactive Python plug-ins must call `GimpUi.init()` before constructing dialogs. The normal development interpreter cannot resolve `gi`; validate GIMP-facing code with the embedded GIMP runtime.
 - CI now exercises the Python 3.10 minimum and 3.12 primary development runtime. A remote Python 3.14 Actions job failed with an opaque pytest exit code despite passing locally, so 3.14 remains a local compatibility check until that runner-specific failure is reproducible.
-- GitHub Actions warned that older action majors targeted deprecated Node 20 runtimes. The workflow now uses `checkout@v5`, `setup-python@v6`, and the current `upload-artifact@v7`, all using Node 24-compatible action runtimes.
+- GitHub Actions warned that older action majors targeted deprecated Node 20 runtimes. The workflow now uses the current Node 24-compatible majors: `checkout@v7`, `setup-python@v7`, and `upload-artifact@v7`.
 
 ## Priority 1: Finish the reliable generation workflow
 
