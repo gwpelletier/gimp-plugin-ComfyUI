@@ -21,6 +21,7 @@ from .resources import (
     CheckpointType,
     checkpoint_profile,
     validate_checkpoint_workflow,
+    workflow_matches_checkpoint_type,
     workflow_supports_vae,
 )
 from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
@@ -66,26 +67,27 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.unet = self._add_searchable_combo(grid, 6, "UNET")
         self.clip_l = self._add_searchable_combo(grid, 7, "Flux CLIP L")
         self.clip_t5 = self._add_searchable_combo(grid, 8, "Flux T5")
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 9)
-        self.vae = self._add_searchable_combo(grid, 10, "VAE")
+        self.krea_model = self._add_searchable_combo(grid, 9, "Krea 2 model")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 10)
+        self.vae = self._add_searchable_combo(grid, 11, "VAE")
         self._update_vae_support()
-        self.steps = self._add_spin(grid, 11, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 12, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 13, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 14, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 15, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 16, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.steps = self._add_spin(grid, 12, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 13, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 14, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 15, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 16, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 17, "Scheduler", ["normal", "karras", "simple"], "normal")
         self._profile_defaults = {"steps": 20, "cfg": 8.0, "denoise": 1.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
-            17,
+            18,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
-        self.output_directory = self._add_entry(grid, 18, "Export directory", "")
+        self.output_directory = self._add_entry(grid, 19, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 19, 2, 1)
+        grid.attach(self.status, 0, 20, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -159,7 +161,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     @staticmethod
     def _add_checkpoint_controls(grid: Gtk.Grid, row: int):
-        label = Gtk.Label(label="Checkpoint", xalign=0)
+        label = Gtk.Label(label="Checkpoint / family", xalign=0)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         checkpoint = Gtk.ComboBoxText.new_with_entry()
         checkpoint.set_hexpand(True)
@@ -167,7 +169,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         for checkpoint_type in CheckpointType:
             profile.append_text(checkpoint_type.value)
         profile.set_active(0)
-        profile.set_tooltip_text("Auto detects from workflow first, then checkpoint name")
+        profile.set_tooltip_text("Filter workflows and choose family-specific model resources")
         box.pack_start(checkpoint, True, True, 0)
         box.pack_start(profile, False, False, 0)
         grid.attach(label, 0, row, 1, 1)
@@ -230,6 +232,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             "unet": self.unet.get_child().get_text(),
             "clip_l": self.clip_l.get_child().get_text(),
             "clip_t5": self.clip_t5.get_child().get_text(),
+            "krea_model": self.krea_model.get_child().get_text(),
             "vae": self.vae.get_child().get_text(),
             "loras": self._selected_loras(),
             "steps": self.steps.get_value_as_int(),
@@ -255,6 +258,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.unet.get_child().set_text(str(settings.get("unet", "")))
         self.clip_l.get_child().set_text(str(settings.get("clip_l", "")))
         self.clip_t5.get_child().set_text(str(settings.get("clip_t5", "")))
+        self.krea_model.get_child().set_text(str(settings.get("krea_model", "")))
         self.vae.get_child().set_text(str(settings.get("vae", "")))
         self.steps.set_value(float(settings.get("steps", 20)))
         self.cfg.set_value(float(settings.get("cfg", 8.0)))
@@ -334,10 +338,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _refresh_workflow_selector(self) -> None:
         self.workflow_selector.remove_all()
         mode = self.mode.get_active_text() if hasattr(self, "mode") else "Image Edit"
+        family = self._selected_checkpoint_type()
         workflows = [
             workflow for workflow in self.workflow_registry.list()
             if Path(workflow["path"]).is_file()
             if ("inpainting" in Path(workflow["path"]).stem.casefold()) == (mode == "Inpainting")
+            if self._workflow_matches_family(workflow["path"], family)
         ]
         for workflow in workflows:
             self.workflow_selector.append(workflow["path"], f'{workflow["title"]} - {workflow["path"]}')
@@ -365,7 +371,23 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._apply_checkpoint_profile()
 
     def _on_checkpoint_profile_changed(self, _selector: Gtk.ComboBoxText) -> None:
+        self._refresh_workflow_selector()
         self._apply_checkpoint_profile()
+
+    def _selected_checkpoint_type(self) -> CheckpointType:
+        if not hasattr(self, "checkpoint_type"):
+            return CheckpointType.AUTO
+        try:
+            return CheckpointType(self.checkpoint_type.get_active_text() or CheckpointType.AUTO.value)
+        except ValueError:
+            return CheckpointType.AUTO
+
+    @staticmethod
+    def _workflow_matches_family(workflow_path: str, family: CheckpointType) -> bool:
+        try:
+            return workflow_matches_checkpoint_type(load_workflow(workflow_path), family)
+        except (OSError, ValueError):
+            return False
 
     def _apply_checkpoint_profile(self) -> None:
         if not hasattr(self, "steps"):
@@ -375,7 +397,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             return
         try:
             workflow = load_workflow(workflow_path)
-            override = CheckpointType(self.checkpoint_type.get_active_text() or CheckpointType.AUTO.value)
+            override = self._selected_checkpoint_type()
             profile = checkpoint_profile(workflow, self.checkpoint.get_child().get_text(), override)
         except (OSError, ValueError):
             return
@@ -416,7 +438,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             return
         selected = self.workflow_selector.get_active_id()
         if not selected:
-            for control in (self.unet, self.clip_l, self.clip_t5):
+            for control in (self.checkpoint, self.unet, self.clip_l, self.clip_t5, self.krea_model):
                 control.set_sensitive(False)
             return
         try:
@@ -424,9 +446,11 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
         except (OSError, ValueError):
             classes = set()
-        is_flux = "UNETLoader" in classes or "DualCLIPLoader" in classes
-        for control in (self.unet, self.clip_l, self.clip_t5):
-            control.set_sensitive(is_flux)
+        self.checkpoint.set_sensitive(bool({"CheckpointLoader", "CheckpointLoaderSimple"} & classes))
+        self.unet.set_sensitive("UNETLoader" in classes)
+        self.clip_l.set_sensitive("DualCLIPLoader" in classes)
+        self.clip_t5.set_sensitive("DualCLIPLoader" in classes)
+        self.krea_model.set_sensitive("Krea2ImageNode" in classes)
 
     def _choose_workflows(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserDialog(
@@ -472,6 +496,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "checkpoints": client.get_available_checkpoints(),
                 "unets": client.get_available_unets(),
                 "clips": client.get_available_clip_models(),
+                "clip_t5": client.get_available_clip_models("clip_name2"),
+                "krea_models": client.get_available_krea_models(),
                 "loras": client.get_available_loras(),
                 "vaes": client.get_available_vaes(),
                 "samplers": client.get_available_samplers(),
@@ -486,7 +512,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._replace_combo_options(self.checkpoint, options["checkpoints"])
         self._replace_combo_options(self.unet, options["unets"])
         self._replace_combo_options(self.clip_l, options["clips"])
-        self._replace_combo_options(self.clip_t5, options["clips"])
+        self._replace_combo_options(self.clip_t5, options["clip_t5"])
+        self._replace_combo_options(self.krea_model, options["krea_models"])
         self._replace_combo_options(self.lora_selector, options["loras"])
         self._replace_combo_options(self.vae, options["vaes"])
         self._replace_combo_options(self.sampler, options["samplers"])
@@ -593,6 +620,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "unet": self.unet.get_child().get_text() or None,
                 "clip_l": self.clip_l.get_child().get_text() or None,
                 "clip_t5": self.clip_t5.get_child().get_text() or None,
+                "krea_model": self.krea_model.get_child().get_text() or None,
                 "vae": self.vae.get_child().get_text() or None,
                 "workflow_path": workflow_path,
                 "loras": self._selected_loras(),
@@ -664,6 +692,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     unet=settings["unet"],
                     clip_l=settings["clip_l"],
                     clip_t5=settings["clip_t5"],
+                    krea_model=settings["krea_model"],
                     input_image=uploaded_name,
                     mask_image=uploaded_mask_name,
                     seed=settings["seed"],
