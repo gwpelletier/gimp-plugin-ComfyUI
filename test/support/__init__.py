@@ -1,0 +1,1 @@
+"""Test-only boundary adapters and fixtures."""
