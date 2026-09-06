@@ -46,13 +46,14 @@ class CheckpointProfile:
     cfg: float
     sampler: str
     scheduler: str
+    denoise: float
 
 
 _PROFILES = {
-    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal"),
-    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal"),
-    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal"),
-    CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal"),
+    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal", 0.75),
+    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal", 0.8),
+    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal", 0.65),
+    CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal", 1.0),
 }
 
 
@@ -84,7 +85,7 @@ def checkpoint_profile(
     inferred = infer_checkpoint_type(workflow, checkpoint)
     profile = _PROFILES[inferred]
     if inferred == CheckpointType.CUSTOM:
-        return CheckpointProfile(inferred, "unknown", "no reliable signal", 20, 8.0, "euler", "normal")
+        return CheckpointProfile(inferred, "unknown", "no reliable signal", 20, 8.0, "euler", "normal", 1.0)
     classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
     workflow_signal = bool(
         {"UNETLoader", "DualCLIPLoader", "CLIPTextEncodeSDXL", "CLIPTextEncodeSDXLRefiner"} & classes

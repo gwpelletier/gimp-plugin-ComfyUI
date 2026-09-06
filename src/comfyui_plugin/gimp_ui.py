@@ -55,35 +55,37 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         content.pack_start(grid, True, True, 0)
 
         self.endpoint = self._add_entry(grid, 0, "ComfyUI URL", "http://127.0.0.1:8188")
-        self.workflow_selector = self._add_workflow_selector(grid, 1)
+        self.mode = self._add_combo(grid, 1, "Mode", ["Image Edit", "Inpainting"], "Image Edit")
+        self.mode.connect("changed", self._on_mode_changed)
+        self.workflow_selector = self._add_workflow_selector(grid, 2)
         self._ensure_default_workflows()
         self._refresh_workflow_selector()
-        self.prompt = self._add_entry(grid, 2, "Prompt", "")
-        self.negative_prompt = self._add_entry(grid, 3, "Negative prompt", "")
-        self.checkpoint, self.checkpoint_type = self._add_checkpoint_controls(grid, 4)
-        self.unet = self._add_searchable_combo(grid, 5, "UNET")
-        self.clip_l = self._add_searchable_combo(grid, 6, "Flux CLIP L")
-        self.clip_t5 = self._add_searchable_combo(grid, 7, "Flux T5")
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 8)
-        self.vae = self._add_searchable_combo(grid, 9, "VAE")
+        self.prompt = self._add_entry(grid, 3, "Prompt", "")
+        self.negative_prompt = self._add_entry(grid, 4, "Negative prompt", "")
+        self.checkpoint, self.checkpoint_type = self._add_checkpoint_controls(grid, 5)
+        self.unet = self._add_searchable_combo(grid, 6, "UNET")
+        self.clip_l = self._add_searchable_combo(grid, 7, "Flux CLIP L")
+        self.clip_t5 = self._add_searchable_combo(grid, 8, "Flux T5")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 9)
+        self.vae = self._add_searchable_combo(grid, 10, "VAE")
         self._update_vae_support()
-        self.steps = self._add_spin(grid, 10, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 11, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 12, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 13, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 14, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 15, "Scheduler", ["normal", "karras", "simple"], "normal")
-        self._profile_defaults = {"steps": 20, "cfg": 8.0, "sampler": "euler", "scheduler": "normal"}
+        self.steps = self._add_spin(grid, 11, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 12, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 13, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 14, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 15, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 16, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self._profile_defaults = {"steps": 20, "cfg": 8.0, "denoise": 1.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
-            16,
+            17,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
-        self.output_directory = self._add_entry(grid, 17, "Export directory", "")
+        self.output_directory = self._add_entry(grid, 18, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 18, 2, 1)
+        grid.attach(self.status, 0, 19, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -220,6 +222,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _settings_snapshot(self) -> dict:
         """Return dialog values that can be stored as history or a style."""
         return {
+            "mode": self.mode.get_active_text(),
             "prompt": self.prompt.get_text(),
             "negative_prompt": self.negative_prompt.get_text(),
             "checkpoint": self.checkpoint.get_child().get_text(),
@@ -239,6 +242,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _apply_settings(self, settings: dict) -> None:
         """Apply stored prompt and generation values to the dialog."""
+        mode = settings.get("mode")
+        if mode in {"Image Edit", "Inpainting"}:
+            self.mode.set_active(["Image Edit", "Inpainting"].index(mode))
         self.prompt.set_text(str(settings.get("prompt", "")))
         self.negative_prompt.set_text(str(settings.get("negative_prompt", "")))
         self.checkpoint.get_child().set_text(str(settings.get("checkpoint", "")))
@@ -311,6 +317,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _configure_eraser_defaults(self) -> None:
         """Select the bundled inpainting workflow and eraser prompt."""
+        self.mode.set_active(1)
+        self._refresh_workflow_selector()
         workflows = self.workflow_registry.list()
         inpainting = next(
             (item["path"] for item in workflows if Path(item["path"]).name == "sdxl-inpainting-api.json"),
@@ -325,14 +333,25 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _refresh_workflow_selector(self) -> None:
         self.workflow_selector.remove_all()
-        workflows = self.workflow_registry.list()
+        mode = self.mode.get_active_text() if hasattr(self, "mode") else "Image Edit"
+        workflows = [
+            workflow for workflow in self.workflow_registry.list()
+            if Path(workflow["path"]).is_file()
+            if ("inpainting" in Path(workflow["path"]).stem.casefold()) == (mode == "Inpainting")
+        ]
         for workflow in workflows:
             self.workflow_selector.append(workflow["path"], f'{workflow["title"]} - {workflow["path"]}')
         selected = self.workflow_registry.selected_path or (workflows[0]["path"] if workflows else None)
+        if selected not in {workflow["path"] for workflow in workflows}:
+            selected = workflows[0]["path"] if workflows else None
         if selected is not None:
             self.workflow_selector.set_active_id(selected)
         self._update_vae_support()
         self._update_model_resource_support()
+
+    def _on_mode_changed(self, _selector: Gtk.ComboBoxText) -> None:
+        self._refresh_workflow_selector()
+        self._apply_checkpoint_profile()
 
     def _on_workflow_changed(self, selector: Gtk.ComboBoxText) -> None:
         selected = selector.get_active_id()
@@ -363,6 +382,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         values = {
             "steps": profile.steps,
             "cfg": profile.cfg,
+            "denoise": profile.denoise,
             "sampler": profile.sampler,
             "scheduler": profile.scheduler,
         }
@@ -370,6 +390,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             self.steps.set_value(values["steps"])
         if self.cfg.get_value() == self._profile_defaults["cfg"]:
             self.cfg.set_value(values["cfg"])
+        if self.denoise.get_value() == self._profile_defaults["denoise"]:
+            self.denoise.set_value(values["denoise"])
         if self.sampler.get_active_text() == self._profile_defaults["sampler"]:
             self._replace_combo_options(self.sampler, [values["sampler"]])
         if self.scheduler.get_active_text() == self._profile_defaults["scheduler"]:
@@ -544,8 +566,10 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             workflow_path = self.workflow_selector.get_active_id()
             if not workflow_path:
                 raise ValueError("Select a ComfyUI API workflow")
-            if self.eraser_mode and (self.image is None or Gimp.Selection.is_empty(self.image)):
-                raise ValueError("Paint an erase area with GIMP's brush before generating")
+            if self.mode.get_active_text() == "Inpainting" and (
+                self.image is None or Gimp.Selection.is_empty(self.image)
+            ):
+                raise ValueError("Paint an inpainting area with GIMP's brush before generating")
             workflow = load_workflow(workflow_path)
             profile = checkpoint_profile(
                 workflow,
@@ -561,6 +585,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             input_path = self._stage_input_image()
             mask_path = self._stage_mask_image()
             settings = {
+                "mode": self.mode.get_active_text(),
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_child().get_text() or None,

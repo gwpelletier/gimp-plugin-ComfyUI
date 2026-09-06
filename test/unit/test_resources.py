@@ -89,6 +89,7 @@ class TestCheckpointProfiles:
         # Assert
         assert profile.checkpoint_type == CheckpointType.SDXL
         assert profile.confidence == "high"
+        assert profile.denoise == 0.8
 
     def test_rejects_flux_checkpoint_with_classic_workflow(self):
         # Arrange

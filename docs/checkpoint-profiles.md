@@ -5,6 +5,11 @@ The generation dialog exposes a checkpoint profile selector beside the checkpoin
 - `Auto` checks workflow structure first, then uses a checkpoint-name hint.
 - `Flux`, `SDXL`, `SD 1.5`, and `Custom` are explicit overrides.
 
+The dialog also exposes a top-level generation mode:
+
+- `Image Edit` shows the SDXL and Flux image-edit workflows.
+- `Inpainting` shows the SDXL and Flux inpainting workflows and requires a painted GIMP selection.
+
 Workflow signals have higher confidence than filenames. Flux workflows are identified by nodes such as `UNETLoader` or `DualCLIPLoader`; SDXL workflows are identified by SDXL conditioning nodes. Names containing family hints such as `flux`, `sdxl`, or `sd15` are treated as medium-confidence suggestions only.
 
 Profiles provide conservative defaults for steps, CFG, sampler, and scheduler. Defaults are applied only while those controls still contain their previous profile defaults, so changing a value manually preserves the user's choice. The selected profile is included in generation metadata and saved prompt/style settings.
