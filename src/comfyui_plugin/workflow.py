@@ -142,7 +142,8 @@ def apply_generation_parameters(
     unet: str | None = None,
     clip_l: str | None = None,
     clip_t5: str | None = None,
-    krea_model: str | None = None,
+    diffusion_model: str | None = None,
+    krea_clip: str | None = None,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -177,7 +178,8 @@ def apply_generation_parameters(
         "unet": unet,
         "clip_l": clip_l,
         "clip_t5": clip_t5,
-        "krea_model": krea_model,
+        "diffusion_model": diffusion_model,
+        "krea_clip": krea_clip,
         "seed": seed,
         "width": width,
         "height": height,
@@ -200,13 +202,15 @@ def apply_generation_parameters(
             inputs["vae_name"] = vae
         if class_type == "UNETLoader" and unet is not None:
             inputs["unet_name"] = unet
+        if class_type in {"UNETLoader", "DiffusionModelLoader"} and diffusion_model is not None:
+            inputs["unet_name" if class_type == "UNETLoader" else "model_name"] = diffusion_model
+        if class_type == "CLIPLoader" and krea_clip is not None:
+            inputs["clip_name"] = krea_clip
         if class_type == "DualCLIPLoader":
             if clip_l is not None:
                 inputs["clip_name1"] = clip_l
             if clip_t5 is not None:
                 inputs["clip_name2"] = clip_t5
-        if class_type == "Krea2ImageNode" and krea_model is not None:
-            inputs["model"] = krea_model
         for key, value in {
             "seed": seed,
             "noise_seed": seed,

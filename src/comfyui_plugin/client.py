@@ -228,6 +228,10 @@ class ComfyUIClient:
         except (KeyError, IndexError, TypeError, AttributeError):
             return []
 
+    def get_available_krea_clips(self) -> list[str]:
+        """Return CLIP resources advertised by the local Krea2 loader."""
+        return self.get_node_input_options("CLIPLoader", "clip_name")
+
     def get_available_samplers(self) -> list[str]:
         """Return sampler names advertised by the ComfyUI node schema."""
         return self.get_node_input_options("KSampler", "sampler_name")

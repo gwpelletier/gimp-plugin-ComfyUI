@@ -19,10 +19,13 @@ from .gimp_image import GimpImageOperations
 from .export import ExportError, ImageExporter
 from .resources import (
     CheckpointType,
+    best_guess_option,
     checkpoint_profile,
+    family_supports_mode,
     infer_checkpoint_type,
     validate_checkpoint_workflow,
     workflow_matches_checkpoint_type,
+    workflow_supports_inpainting,
     workflow_supports_vae,
 )
 from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
@@ -48,6 +51,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.active_coordinator: GenerationCoordinator | None = None
         self.cancel_requested = False
         self.completed = False
+        self._remote_options: dict[str, list[str]] = {}
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -57,37 +61,39 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         content.pack_start(grid, True, True, 0)
 
         self.endpoint = self._add_entry(grid, 0, "ComfyUI URL", "http://127.0.0.1:8188")
-        self.mode, self.checkpoint, self.checkpoint_type = self._add_mode_and_checkpoint_controls(grid, 1)
+        self.mode = self._add_combo(grid, 1, "Mode", ["Image Edit", "Inpainting"], "Image Edit")
         self.mode.connect("changed", self._on_mode_changed)
-        self.workflow_selector = self._add_workflow_selector(grid, 2)
+        self.checkpoint, self.checkpoint_type, self.checkpoint_label = self._add_checkpoint_controls(grid, 2)
+        self.workflow_selector = self._add_workflow_selector(grid, 3)
         self._ensure_default_workflows()
         self._refresh_workflow_selector()
-        self.prompt = self._add_entry(grid, 3, "Prompt", "")
-        self.negative_prompt = self._add_entry(grid, 4, "Negative prompt", "")
-        self.unet = self._add_searchable_combo(grid, 5, "UNET")
-        self.clip_l = self._add_searchable_combo(grid, 6, "Flux CLIP L")
-        self.clip_t5 = self._add_searchable_combo(grid, 7, "Flux T5")
-        self.krea_model = self._add_searchable_combo(grid, 8, "Krea 2 model")
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 9)
-        self.vae = self._add_searchable_combo(grid, 10, "VAE")
+        self.prompt = self._add_entry(grid, 4, "Prompt", "")
+        self.negative_prompt = self._add_entry(grid, 5, "Negative prompt", "")
+        self.unet = self._add_searchable_combo(grid, 6, "UNET")
+        self.clip_l = self._add_searchable_combo(grid, 7, "Flux CLIP L")
+        self.clip_t5 = self._add_searchable_combo(grid, 8, "Flux T5")
+        self.krea_diffusion_model = self._add_searchable_combo(grid, 9, "Diffusion Model")
+        self.krea_clip = self._add_searchable_combo(grid, 10, "Krea2 CLIP")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 11)
+        self.vae = self._add_searchable_combo(grid, 12, "VAE")
         self._update_vae_support()
-        self.steps = self._add_spin(grid, 11, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 12, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 13, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 14, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 15, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 16, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.steps = self._add_spin(grid, 13, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 14, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 15, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 16, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 17, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 18, "Scheduler", ["normal", "karras", "simple"], "normal")
         self._profile_defaults = {"steps": 20, "cfg": 8.0, "denoise": 1.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
-            17,
+            19,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
-        self.output_directory = self._add_entry(grid, 18, "Export directory", "")
+        self.output_directory = self._add_entry(grid, 20, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 19, 2, 1)
+        grid.attach(self.status, 0, 21, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -128,6 +134,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         label = Gtk.Label(label=label_text, xalign=0)
         entry = Gtk.Entry(text=value)
         entry.set_hexpand(True)
+        entry._label_widget = label
         grid.attach(label, 0, row, 1, 1)
         grid.attach(entry, 1, row, 1, 1)
         return entry
@@ -151,46 +158,6 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         return selector
 
     @staticmethod
-    def _add_mode_and_checkpoint_controls(grid: Gtk.Grid, row: int):
-        row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-
-        mode_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        mode_label = Gtk.Label(label="Mode", xalign=0)
-        mode = Gtk.ComboBoxText()
-        for option in ("Image Edit", "Inpainting"):
-            mode.append_text(option)
-        mode.set_active(0)
-        mode.set_hexpand(True)
-        mode_box.pack_start(mode_label, False, False, 0)
-        mode_box.pack_start(mode, False, False, 0)
-
-        checkpoint_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        checkpoint_label = Gtk.Label(label="Checkpoint / family", xalign=0)
-        checkpoint_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        checkpoint = Gtk.ComboBoxText.new_with_entry()
-        checkpoint.set_hexpand(True)
-        profile = Gtk.ComboBoxText()
-        for checkpoint_type in (
-            CheckpointType.AUTO,
-            CheckpointType.KREA2,
-            CheckpointType.FLUX,
-            CheckpointType.SDXL,
-            CheckpointType.SD15,
-        ):
-            profile.append_text(checkpoint_type.value)
-        profile.set_active(0)
-        profile.set_tooltip_text("Filter workflows and choose family-specific model resources")
-        checkpoint_controls.pack_start(checkpoint, True, True, 0)
-        checkpoint_controls.pack_start(profile, False, False, 0)
-        checkpoint_box.pack_start(checkpoint_label, False, False, 0)
-        checkpoint_box.pack_start(checkpoint_controls, False, False, 0)
-
-        row_box.pack_start(mode_box, True, True, 0)
-        row_box.pack_start(checkpoint_box, True, True, 0)
-        grid.attach(row_box, 0, row, 2, 1)
-        return mode, checkpoint, profile
-
-    @staticmethod
     def _add_searchable_combo(grid: Gtk.Grid, row: int, label_text: str) -> Gtk.ComboBoxText:
         label = Gtk.Label(label=label_text, xalign=0)
         combo = Gtk.ComboBoxText.new_with_entry()
@@ -199,6 +166,29 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.attach(label, 0, row, 1, 1)
         grid.attach(combo, 1, row, 1, 1)
         return combo
+
+    @staticmethod
+    def _add_checkpoint_controls(grid: Gtk.Grid, row: int):
+        label = Gtk.Label(label="Family / Checkpoint", xalign=0)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        checkpoint = Gtk.ComboBoxText.new_with_entry()
+        checkpoint.set_hexpand(True)
+        profile = Gtk.ComboBoxText()
+        for checkpoint_type in (
+            CheckpointType.AUTO,
+            CheckpointType.KREA2_TURBO,
+            CheckpointType.FLUX,
+            CheckpointType.SDXL,
+            CheckpointType.SD15,
+        ):
+            profile.append_text(checkpoint_type.value)
+        profile.set_active(0)
+        profile.set_tooltip_text("Filter workflows and choose family-specific model resources")
+        box.pack_start(profile, False, False, 0)
+        box.pack_start(checkpoint, True, True, 0)
+        grid.attach(label, 0, row, 1, 1)
+        grid.attach(box, 1, row, 1, 1)
+        return checkpoint, profile, label
 
     def _add_lora_controls(self, grid: Gtk.Grid, row: int):
         label = Gtk.Label(label="LoRAs", xalign=0)
@@ -256,7 +246,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             "unet": self.unet.get_child().get_text(),
             "clip_l": self.clip_l.get_child().get_text(),
             "clip_t5": self.clip_t5.get_child().get_text(),
-            "krea_model": self.krea_model.get_child().get_text(),
+            "diffusion_model": self.krea_diffusion_model.get_child().get_text(),
+            "krea_clip": self.krea_clip.get_child().get_text(),
             "vae": self.vae.get_child().get_text(),
             "loras": self._selected_loras(),
             "steps": self.steps.get_value_as_int(),
@@ -282,7 +273,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.unet.get_child().set_text(str(settings.get("unet", "")))
         self.clip_l.get_child().set_text(str(settings.get("clip_l", "")))
         self.clip_t5.get_child().set_text(str(settings.get("clip_t5", "")))
-        self.krea_model.get_child().set_text(str(settings.get("krea_model", "")))
+        self.krea_diffusion_model.get_child().set_text(str(settings.get("diffusion_model", "")))
+        self.krea_clip.get_child().set_text(str(settings.get("krea_clip", "")))
         self.vae.get_child().set_text(str(settings.get("vae", "")))
         self.steps.set_value(float(settings.get("steps", 20)))
         self.cfg.set_value(float(settings.get("cfg", 8.0)))
@@ -336,11 +328,16 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _ensure_default_workflows(self) -> None:
         """Register the workflows shipped with the plug-in."""
         workflow_directory = Path(__file__).resolve().parents[2] / "workflows"
+        if not workflow_directory.is_dir():
+            workflow_directory = Path(__file__).resolve().parents[1] / "workflows"
         self.workflow_registry.add([
             workflow_directory / "sdxl-image-edit-api.json",
             workflow_directory / "sdxl-inpainting-api.json",
+            workflow_directory / "sd15-image-edit-api.json",
+            workflow_directory / "sd15-inpainting-api.json",
             workflow_directory / "flux-image-edit-api.json",
             workflow_directory / "flux-inpainting-api.json",
+            workflow_directory / "krea2-turbo-text-to-image-api.json",
         ])
 
     def _configure_eraser_defaults(self) -> None:
@@ -368,6 +365,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             if Path(workflow["path"]).is_file()
             if ("inpainting" in Path(workflow["path"]).stem.casefold()) == (mode == "Inpainting")
             if self._workflow_matches_family(workflow["path"], family)
+            if mode != "Inpainting" or self._workflow_supports_selected_inpainting(workflow["path"], family)
         ]
         for workflow in workflows:
             self.workflow_selector.append(workflow["path"], f'{workflow["title"]} - {workflow["path"]}')
@@ -380,6 +378,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._update_model_resource_support()
 
     def _on_mode_changed(self, _selector: Gtk.ComboBoxText) -> None:
+        if not family_supports_mode(self._selected_checkpoint_type(), self.mode.get_active_text() or ""):
+            profile_values = [item.value for item in CheckpointType]
+            self.checkpoint_type.set_active(profile_values.index(CheckpointType.AUTO.value))
         self._refresh_workflow_selector()
         self._apply_checkpoint_profile()
 
@@ -392,10 +393,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._apply_checkpoint_profile()
 
     def _on_checkpoint_changed(self, _entry: Gtk.Entry) -> None:
+        self._update_family_resource_guesses()
         self._apply_checkpoint_profile()
 
     def _on_checkpoint_profile_changed(self, _selector: Gtk.ComboBoxText) -> None:
         self._refresh_workflow_selector()
+        self._update_family_resource_guesses()
         self._apply_checkpoint_profile()
 
     def _selected_checkpoint_type(self) -> CheckpointType:
@@ -410,6 +413,15 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _workflow_matches_family(workflow_path: str, family: CheckpointType) -> bool:
         try:
             return workflow_matches_checkpoint_type(load_workflow(workflow_path), family)
+        except (OSError, ValueError):
+            return False
+
+    @staticmethod
+    def _workflow_supports_selected_inpainting(workflow_path: str, family: CheckpointType) -> bool:
+        if family == CheckpointType.KREA2_TURBO:
+            return False
+        try:
+            return workflow_supports_inpainting(load_workflow(workflow_path))
         except (OSError, ValueError):
             return False
 
@@ -465,10 +477,35 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         if not hasattr(self, "unet"):
             return
         selected = self.workflow_selector.get_active_id()
+        selected_family = self._selected_checkpoint_type()
         if not selected:
-            for control in (self.checkpoint, self.unet, self.clip_l, self.clip_t5, self.krea_model):
-                control.set_sensitive(False)
+            show_negative_prompt = selected_family in {CheckpointType.AUTO, CheckpointType.SDXL, CheckpointType.SD15}
+            self._set_control_visibility(self.negative_prompt, show_negative_prompt)
+            if selected_family == CheckpointType.AUTO:
+                self._update_primary_model_field(selected_family)
+                self._set_control_visibility(self.checkpoint, True)
+                for control in (self.unet, self.clip_l, self.clip_t5, self.krea_diffusion_model, self.krea_clip, self.vae):
+                    self._set_control_visibility(control, False)
+                    control.set_sensitive(False)
+                self.checkpoint.set_sensitive(False)
+                return
+            show_checkpoint = selected_family in {CheckpointType.SDXL, CheckpointType.SD15}
+            show_flux_resources = selected_family == CheckpointType.FLUX
+            show_krea_resource = selected_family == CheckpointType.KREA2_TURBO
+            self._update_primary_model_field(selected_family)
             self._set_control_visibility(self.checkpoint, True)
+            self._set_control_visibility(self.unet, False)
+            self._set_control_visibility(self.clip_l, show_flux_resources)
+            self._set_control_visibility(self.clip_t5, show_flux_resources)
+            self._set_control_visibility(self.krea_diffusion_model, False)
+            self._set_control_visibility(self.krea_clip, show_krea_resource)
+            self._set_control_visibility(self.vae, True)
+            self.checkpoint.set_sensitive(show_checkpoint or show_flux_resources or show_krea_resource)
+            self.unet.set_sensitive(False)
+            self.clip_l.set_sensitive(show_flux_resources)
+            self.clip_t5.set_sensitive(show_flux_resources)
+            self.krea_diffusion_model.set_sensitive(False)
+            self.krea_clip.set_sensitive(show_krea_resource)
             return
         try:
             workflow = load_workflow(selected)
@@ -476,24 +513,82 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         except (OSError, ValueError):
             classes = set()
             workflow = {}
-        family = self._selected_checkpoint_type()
-        if family == CheckpointType.AUTO:
+        family = selected_family
+        is_auto = family == CheckpointType.AUTO
+        if is_auto:
             family = infer_checkpoint_type(workflow)
-        show_checkpoint = family in {CheckpointType.SDXL, CheckpointType.SD15} and bool(
-            {"CheckpointLoader", "CheckpointLoaderSimple"} & classes
+        self._update_primary_model_field(family)
+        show_negative_prompt = family not in {CheckpointType.FLUX, CheckpointType.KREA2_TURBO}
+        self._set_control_visibility(self.negative_prompt, show_negative_prompt)
+        show_checkpoint = family in {CheckpointType.SDXL, CheckpointType.SD15} and (
+            not is_auto or bool({"CheckpointLoader", "CheckpointLoaderSimple"} & classes)
         )
-        show_flux_resources = family == CheckpointType.FLUX
-        show_krea_resource = family == CheckpointType.KREA2 and "Krea2ImageNode" in classes
+        show_flux_resources = family == CheckpointType.FLUX and (
+            not is_auto or bool({"UNETLoader", "DualCLIPLoader"} & classes)
+        )
+        show_krea_resource = family == CheckpointType.KREA2_TURBO and (
+            not is_auto or "CLIPLoader" in classes
+        )
         self._set_control_visibility(self.checkpoint, True)
-        self._set_control_visibility(self.unet, show_flux_resources and "UNETLoader" in classes)
-        self._set_control_visibility(self.clip_l, show_flux_resources and "DualCLIPLoader" in classes)
-        self._set_control_visibility(self.clip_t5, show_flux_resources and "DualCLIPLoader" in classes)
-        self._set_control_visibility(self.krea_model, show_krea_resource)
-        self.checkpoint.set_sensitive(show_checkpoint)
-        self.unet.set_sensitive(show_flux_resources and "UNETLoader" in classes)
-        self.clip_l.set_sensitive(show_flux_resources and "DualCLIPLoader" in classes)
-        self.clip_t5.set_sensitive(show_flux_resources and "DualCLIPLoader" in classes)
-        self.krea_model.set_sensitive(show_krea_resource)
+        self._set_control_visibility(self.unet, False)
+        self._set_control_visibility(self.clip_l, show_flux_resources)
+        self._set_control_visibility(self.clip_t5, show_flux_resources)
+        self._set_control_visibility(self.krea_diffusion_model, False)
+        self._set_control_visibility(self.krea_clip, show_krea_resource)
+        self.checkpoint.set_sensitive(show_checkpoint or show_flux_resources or show_krea_resource)
+        self.unet.set_sensitive(False)
+        self.clip_l.set_sensitive(show_flux_resources)
+        self.clip_t5.set_sensitive(show_flux_resources)
+        self.krea_diffusion_model.set_sensitive(False)
+        self.krea_clip.set_sensitive(show_krea_resource)
+        show_vae = (
+            family in {
+                CheckpointType.KREA2_TURBO,
+                CheckpointType.FLUX,
+                CheckpointType.SDXL,
+                CheckpointType.SD15,
+            }
+            if not is_auto
+            else workflow_supports_vae(workflow)
+        )
+        self._set_control_visibility(self.vae, show_vae)
+        return
+
+    def _update_primary_model_field(self, family: CheckpointType) -> None:
+        """Change the primary model field label and options for a family."""
+        uses_diffusion_model = family in {CheckpointType.FLUX, CheckpointType.KREA2_TURBO}
+        self.checkpoint_label.set_text("Family / Diffusion Model" if uses_diffusion_model else "Family / Checkpoint")
+        self.checkpoint.get_child().set_placeholder_text(
+            "Select diffusion model" if uses_diffusion_model else "Select checkpoint"
+        )
+        option_key = "unets" if uses_diffusion_model else "checkpoints"
+        self._replace_combo_options(self.checkpoint, self._remote_options.get(option_key, []))
+
+    def _update_family_resource_guesses(self) -> None:
+        """Choose likely CLIP resources after family or model changes."""
+        family = self._selected_checkpoint_type()
+        workflow_path = self.workflow_selector.get_active_id()
+        if family == CheckpointType.AUTO and workflow_path:
+            try:
+                family = infer_checkpoint_type(load_workflow(workflow_path))
+            except (OSError, ValueError):
+                return
+        if family == CheckpointType.FLUX:
+            self._select_best_guess(self.clip_l, self._remote_options.get("clips", []), ("clip_l", "clip-l", "clipl"))
+            self._select_best_guess(self.clip_t5, self._remote_options.get("clip_t5", []), ("t5", "t5xxl"))
+        elif family == CheckpointType.KREA2_TURBO:
+            self._select_best_guess(
+                self.krea_clip,
+                self._remote_options.get("krea_clips", []),
+                ("krea2", "krea", "qwen"),
+            )
+
+    @staticmethod
+    def _select_best_guess(combo: Gtk.ComboBoxText, options: list[str], hints: tuple[str, ...]) -> None:
+        current = combo.get_child().get_text().strip()
+        guess = best_guess_option(options, hints, current)
+        if guess is not None:
+            combo.get_child().set_text(guess)
 
     @staticmethod
     def _set_control_visibility(control: Gtk.Widget, is_visible: bool) -> None:
@@ -547,7 +642,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "unets": client.get_available_unets(),
                 "clips": client.get_available_clip_models(),
                 "clip_t5": client.get_available_clip_models("clip_name2"),
-                "krea_models": client.get_available_krea_models(),
+                "krea_diffusion_models": client.get_available_unets(),
+                "krea_clips": client.get_available_krea_clips(),
                 "loras": client.get_available_loras(),
                 "vaes": client.get_available_vaes(),
                 "samplers": client.get_available_samplers(),
@@ -559,15 +655,18 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _apply_remote_options(self, options: dict[str, list[str]]) -> bool:
         """Apply background ComfyUI metadata on the GTK main thread."""
-        self._replace_combo_options(self.checkpoint, options["checkpoints"])
+        self._remote_options = options
         self._replace_combo_options(self.unet, options["unets"])
         self._replace_combo_options(self.clip_l, options["clips"])
         self._replace_combo_options(self.clip_t5, options["clip_t5"])
-        self._replace_combo_options(self.krea_model, options["krea_models"])
+        self._replace_combo_options(self.krea_diffusion_model, options["krea_diffusion_models"])
+        self._replace_combo_options(self.krea_clip, options["krea_clips"])
         self._replace_combo_options(self.lora_selector, options["loras"])
         self._replace_combo_options(self.vae, options["vaes"])
         self._replace_combo_options(self.sampler, options["samplers"])
         self._replace_combo_options(self.scheduler, options["schedulers"])
+        self._update_model_resource_support()
+        self._update_family_resource_guesses()
         self._apply_checkpoint_profile()
         return False
 
@@ -654,6 +753,13 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 CheckpointType(self.checkpoint_type.get_active_text() or CheckpointType.AUTO.value),
             )
             validate_checkpoint_workflow(profile.checkpoint_type, workflow)
+            primary_model = self.checkpoint.get_child().get_text() or None
+            unet = primary_model if profile.checkpoint_type == CheckpointType.FLUX else self.unet.get_child().get_text() or None
+            diffusion_model = (
+                primary_model
+                if profile.checkpoint_type == CheckpointType.KREA2_TURBO
+                else self.krea_diffusion_model.get_child().get_text() or None
+            )
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client
             coordinator = GenerationCoordinator(client)
@@ -667,10 +773,11 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_child().get_text() or None,
                 "checkpoint_type": self.checkpoint_type.get_active_text(),
-                "unet": self.unet.get_child().get_text() or None,
+                "unet": unet,
                 "clip_l": self.clip_l.get_child().get_text() or None,
                 "clip_t5": self.clip_t5.get_child().get_text() or None,
-                "krea_model": self.krea_model.get_child().get_text() or None,
+                "diffusion_model": diffusion_model,
+                "krea_clip": self.krea_clip.get_child().get_text() or None,
                 "vae": self.vae.get_child().get_text() or None,
                 "workflow_path": workflow_path,
                 "loras": self._selected_loras(),
@@ -742,7 +849,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     unet=settings["unet"],
                     clip_l=settings["clip_l"],
                     clip_t5=settings["clip_t5"],
-                    krea_model=settings["krea_model"],
+                    diffusion_model=settings["diffusion_model"],
+                    krea_clip=settings["krea_clip"],
                     input_image=uploaded_name,
                     mask_image=uploaded_mask_name,
                     seed=settings["seed"],

@@ -15,6 +15,18 @@ def filter_options(options: list[str], query: str) -> list[str]:
     return [option for option in options if normalized_query in option.casefold()]
 
 
+def best_guess_option(options: list[str], hints: tuple[str, ...], current: str = "") -> str | None:
+    """Choose a resource by preserving ``current`` or matching a name hint."""
+    if current in options:
+        return current
+    normalized_options = [(option, option.casefold()) for option in options]
+    normalized_hints = tuple(hint.casefold() for hint in hints)
+    for option, normalized_option in normalized_options:
+        if any(hint in normalized_option for hint in normalized_hints):
+            return option
+    return options[0] if len(options) == 1 else None
+
+
 def workflow_supports_vae(workflow: dict[str, Any]) -> bool:
     """Return whether an API workflow exposes a selectable VAE input."""
     return any(
@@ -25,6 +37,14 @@ def workflow_supports_vae(workflow: dict[str, Any]) -> bool:
     )
 
 
+def workflow_supports_inpainting(workflow: dict[str, Any]) -> bool:
+    """Return whether an API workflow exposes a mask input for inpainting."""
+    return any(
+        isinstance(node, dict) and "mask" in node.get("inputs", {})
+        for node in workflow.values()
+    )
+
+
 class CheckpointType(str, Enum):
     """Model families used to select generation defaults."""
 
@@ -32,8 +52,13 @@ class CheckpointType(str, Enum):
     FLUX = "Flux"
     SDXL = "SDXL"
     SD15 = "SD 1.5"
-    KREA2 = "Krea 2"
+    KREA2_TURBO = "Krea2-Turbo"
     CUSTOM = "Custom"
+
+
+def family_supports_mode(family: CheckpointType, mode: str) -> bool:
+    """Return whether a model family supports the selected generation mode."""
+    return not (mode == "Inpainting" and family == CheckpointType.KREA2_TURBO)
 
 
 @dataclass(frozen=True)
@@ -54,7 +79,7 @@ _PROFILES = {
     CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal", 0.75),
     CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal", 0.8),
     CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal", 0.65),
-    CheckpointType.KREA2: CheckpointProfile(CheckpointType.KREA2, "high", "workflow", 28, 4.0, "euler", "normal", 1.0),
+    CheckpointType.KREA2_TURBO: CheckpointProfile(CheckpointType.KREA2_TURBO, "high", "workflow", 20, 1.0, "euler", "simple", 1.0),
     CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal", 1.0),
 }
 
@@ -62,8 +87,14 @@ _PROFILES = {
 def infer_checkpoint_type(workflow: dict[str, Any], checkpoint: str = "") -> CheckpointType:
     """Infer a checkpoint family from workflow structure, then its name."""
     classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
-    if "Krea2ImageNode" in classes:
-        return CheckpointType.KREA2
+    has_krea_clip = any(
+        node.get("class_type") == "CLIPLoader"
+        and node.get("inputs", {}).get("type") == "krea2"
+        for node in workflow.values()
+        if isinstance(node, dict)
+    )
+    if ("UNETLoader" in classes or "DiffusionModelLoader" in classes) and has_krea_clip:
+        return CheckpointType.KREA2_TURBO
     if "UNETLoader" in classes or "DualCLIPLoader" in classes:
         return CheckpointType.FLUX
     if "CLIPTextEncodeSDXL" in classes or "CLIPTextEncodeSDXLRefiner" in classes:
@@ -78,7 +109,7 @@ def infer_checkpoint_type(workflow: dict[str, Any], checkpoint: str = "") -> Che
     if any(marker in normalized for marker in ("sd15", "sd-1.5", "1.5", "dreamshaper")):
         return CheckpointType.SD15
     if "krea" in normalized:
-        return CheckpointType.KREA2
+        return CheckpointType.KREA2_TURBO
     return CheckpointType.CUSTOM
 
 
@@ -114,8 +145,17 @@ def validate_checkpoint_workflow(checkpoint_type: CheckpointType, workflow: dict
         raise ValueError("SDXL models require a workflow with CLIPTextEncodeSDXL nodes")
     if checkpoint_type == CheckpointType.SD15 and not {"CheckpointLoaderSimple", "CLIPTextEncode"} <= classes:
         raise ValueError("SD 1.5 models require a classic CheckpointLoaderSimple workflow")
-    if checkpoint_type == CheckpointType.KREA2 and "Krea2ImageNode" not in classes:
-        raise ValueError("Krea 2 models require a workflow with Krea2ImageNode")
+    has_krea_clip = any(
+        node.get("class_type") == "CLIPLoader"
+        and node.get("inputs", {}).get("type") == "krea2"
+        for node in workflow.values()
+        if isinstance(node, dict)
+    )
+    has_diffusion_loader = bool({"UNETLoader", "DiffusionModelLoader"} & classes)
+    if checkpoint_type == CheckpointType.KREA2_TURBO and not (
+        has_diffusion_loader and "VAELoader" in classes and has_krea_clip
+    ):
+        raise ValueError("Krea2-Turbo models require Diffusion Model, Krea2 CLIP, and VAE loaders")
 
 
 def workflow_matches_checkpoint_type(workflow: dict[str, Any], checkpoint_type: CheckpointType) -> bool:

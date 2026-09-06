@@ -152,6 +152,18 @@ disable force pushes, and use squash merges with a Conventional Commit pull
 request title. Repository administrators may bypass these protections when
 necessary; other contributors may not.
 
+## Bug-fix testing
+
+For a bug reported by a user, follow red/green testing:
+
+1. Add a focused regression test that reproduces the reported failure.
+2. Run that test and verify that it fails for the expected reason.
+3. Implement the fix.
+4. Rerun the same test and the relevant broader suite until it passes.
+
+If the bug cannot be reproduced with an automated test, document why and use
+the narrowest available executable check instead.
+
 ## Change expectations
 
 Keep GIMP bindings at the application boundary, ComfyUI HTTP behavior in the client, and workflow transformation in workflow modules. Add unit coverage for local behavior and integration-flow coverage when a change crosses a real GIMP or ComfyUI boundary.
