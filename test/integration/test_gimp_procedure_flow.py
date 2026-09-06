@@ -23,6 +23,8 @@ class TestGimpProcedureFlow:
                 "pdb = Gimp.get_pdb()",
                 "procedure = pdb.lookup_procedure('python-fu-comfyui-batch')",
                 "assert procedure is not None",
+                "eraser_procedure = pdb.lookup_procedure('python-fu-comfyui-eraser')",
+                "assert eraser_procedure is not None",
                 "image = Gimp.Image.new(16, 16, Gimp.ImageBaseType.RGB)",
                 "config = procedure.create_config()",
                 "config.set_property('run-mode', Gimp.RunMode.NONINTERACTIVE)",

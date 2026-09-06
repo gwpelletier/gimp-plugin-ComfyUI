@@ -25,10 +25,11 @@ from .workflow import validate_api_workflow, load_workflow
 class ComfyUIGenerationDialog(GimpUi.Dialog):
     """Collect generation settings and resolve one request asynchronously."""
 
-    def __init__(self, image: Gimp.Image | None):
+    def __init__(self, image: Gimp.Image | None, *, eraser_mode: bool = False):
         """Create a dialog targeting ``image`` for result-layer insertion."""
-        super().__init__(title="ComfyUI Batch", flags=0)
+        super().__init__(title="ComfyUI AI Eraser" if eraser_mode else "ComfyUI Batch", flags=0)
         self.image = image
+        self.eraser_mode = eraser_mode
         self.image_operations = GimpImageOperations()
         self.plugin_paths = PluginPaths(Path(Gimp.directory()) / "comfyui")
         self.plugin_paths.ensure()
@@ -101,6 +102,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         action_area.pack_start(delete_style_button, False, False, 0)
 
         self.show_all()
+        if self.eraser_mode:
+            self._configure_eraser_defaults()
         self._load_remote_options()
 
     @staticmethod
@@ -263,6 +266,20 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             workflow_directory / "inpainting-api.json",
         ])
 
+    def _configure_eraser_defaults(self) -> None:
+        """Select the bundled inpainting workflow and eraser prompt."""
+        workflows = self.workflow_registry.list()
+        inpainting = next(
+            (item["path"] for item in workflows if Path(item["path"]).name == "inpainting-api.json"),
+            None,
+        )
+        if inpainting:
+            self.workflow_selector.set_active_id(inpainting)
+        self.prompt.set_text("Remove the selected object and reconstruct the background naturally")
+        self.negative_prompt.set_text("visible seams, artifacts, distortion, duplicated objects")
+        self.denoise.set_value(1.0)
+        self.status.set_text("Paint the erase area with GIMP's brush, then click Generate")
+
     def _refresh_workflow_selector(self) -> None:
         self.workflow_selector.remove_all()
         workflows = self.workflow_registry.list()
@@ -418,6 +435,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             workflow_path = self.workflow_selector.get_active_id()
             if not workflow_path:
                 raise ValueError("Select a ComfyUI API workflow")
+            if self.eraser_mode and (self.image is None or Gimp.Selection.is_empty(self.image)):
+                raise ValueError("Paint an erase area with GIMP's brush before generating")
             workflow = load_workflow(workflow_path)
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client

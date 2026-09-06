@@ -76,6 +76,16 @@ Acceptance criteria:
 - [x] Add an integration assertion that an inserted result layer contains the expected parasite payload.
 - [x] Document the metadata key/version and compatibility behavior.
 
+### 3a. AI eraser brush workflow
+
+- [x] Add a dedicated AI Eraser procedure using GIMP's brush-painted Quick Mask selection.
+- [x] Select the bundled inpainting workflow and provide removal prompt defaults.
+- [x] Preserve the source image and selection while inserting the generated result as a layer.
+- [x] Add an opt-in GIMP flow for eraser registration and painted-selection configuration.
+- [x] Document the brush workflow and mask requirements.
+
+Implementation status: **Filters > AI > ComfyUI AI Eraser...** uses local GIMP brush strokes through Quick Mask, then commits one masked inpainting request to ComfyUI. See [`docs/ai-eraser.md`](docs/ai-eraser.md).
+
 ## Priority 2: Migrate the useful source-project UI
 
 ### 4. Workflow registry UI

@@ -21,16 +21,17 @@ class ComfyUIPlugin(Gimp.PlugIn):
 
     def do_query_procedures(self):
         """Return the procedures registered by this plug-in."""
-        return ["python-fu-comfyui-batch"]
+        return ["python-fu-comfyui-batch", "python-fu-comfyui-eraser"]
 
     def do_create_procedure(self, name):
         """Create the GIMP procedure associated with ``name``."""
         procedure = Gimp.ImageProcedure.new(self, name, Gimp.PDBProcType.PLUGIN, self.run, None)
-        procedure.set_menu_label("ComfyUI Batch...")
+        is_eraser = name == "python-fu-comfyui-eraser"
+        procedure.set_menu_label("ComfyUI AI Eraser..." if is_eraser else "ComfyUI Batch...")
         procedure.add_menu_path("<Image>/Filters/AI")
         procedure.set_documentation(
-            "Process images through ComfyUI",
-            "Submit an image batch to a ComfyUI workflow.",
+            "Erase selected objects with ComfyUI" if is_eraser else "Process images through ComfyUI",
+            "Paint an erase mask with GIMP's brush and fill it with ComfyUI." if is_eraser else "Submit an image batch to a ComfyUI workflow.",
             name,
         )
         procedure.set_attribution("GIMP Plugin ComfyUI contributors", "GIMP Plugin ComfyUI contributors", "2026")
@@ -42,7 +43,7 @@ class ComfyUIPlugin(Gimp.PlugIn):
         if run_mode != Gimp.RunMode.INTERACTIVE:
             return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR, None)
         GimpUi.init("gimp-comfyui")
-        dialog = ComfyUIGenerationDialog(image)
+        dialog = ComfyUIGenerationDialog(image, eraser_mode=procedure.get_name() == "python-fu-comfyui-eraser")
         response = dialog.run()
         dialog.destroy()
         status = Gimp.PDBStatusType.SUCCESS if dialog.completed else Gimp.PDBStatusType.CANCEL

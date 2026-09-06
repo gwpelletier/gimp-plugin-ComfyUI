@@ -15,6 +15,8 @@ The repository contains the installable plug-in boundary, ComfyUI queue/history 
 - `workflows/` - ComfyUI API-format templates.
 - `TODO.md` - prioritized migration roadmap and completion criteria.
 - `scripts/build.py` - creates a versioned installable plug-in archive in `dist/`.
+
+For brush-assisted object removal, see [`docs/ai-eraser.md`](docs/ai-eraser.md). The **ComfyUI AI Eraser** procedure uses GIMP Quick Mask and the bundled inpainting workflow.
 - `scripts/install.py` - builds and installs for the current user.
 - `CONTRIBUTING.md` - contributor workflow, validation, and build/install process.
 - `docs/comfyui-compatibility.md` - supported ComfyUI baseline, endpoint notes, and protocol migration plan.
