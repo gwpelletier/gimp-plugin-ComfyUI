@@ -50,6 +50,7 @@ class GenerationRequest:
     prompt: str
     negative_prompt: str
     checkpoint: str | None = None
+    vae: str | None = None
     input_image: str | None = None
     mask_image: str | None = None
     seed: int = -1
@@ -134,6 +135,7 @@ class GenerationCoordinator:
             positive_prompt=request.prompt,
             negative_prompt=request.negative_prompt,
             checkpoint=request.checkpoint,
+            vae=request.vae,
             seed=seed,
             width=request.width,
             height=request.height,

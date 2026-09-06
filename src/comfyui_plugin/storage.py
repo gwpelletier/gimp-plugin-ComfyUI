@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,14 @@ class PluginPaths:
         return self.root / "settings.json"
 
     @property
+    def prompt_history(self) -> Path:
+        return self.root / "prompt-history.json"
+
+    @property
+    def styles(self) -> Path:
+        return self.root / "styles"
+
+    @property
     def workflow_registry(self) -> Path:
         return self.workflows / "workflows.json"
 
@@ -44,6 +53,7 @@ class PluginPaths:
         self.root.mkdir(parents=True, exist_ok=True)
         self.workflows.mkdir(parents=True, exist_ok=True)
         self.temporary_images.mkdir(parents=True, exist_ok=True)
+        self.styles.mkdir(parents=True, exist_ok=True)
 
 
 class JsonStore:
@@ -135,3 +145,88 @@ class WorkflowRegistry:
             "selected_path": None if selected_path == target else selected_path,
         })
         return True
+
+
+class PromptHistory:
+    """Persist recent prompt and generation settings with bounded retention."""
+
+    def __init__(self, path: Path, *, limit: int = 50):
+        if limit < 1:
+            raise ValueError("History limit must be positive")
+        self.store = JsonStore(path)
+        self.limit = limit
+
+    def list(self) -> list[dict[str, Any]]:
+        """Return recent history entries, newest first."""
+        entries = self.store.load().get("entries", [])
+        if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
+            raise StorageError(f"Invalid prompt history: {self.store.path}")
+        return entries[: self.limit]
+
+    def add(self, entry: dict[str, Any]) -> None:
+        """Add an entry, moving an identical entry to the front."""
+        if not isinstance(entry, dict):
+            raise StorageError("Prompt history entries must be JSON objects")
+        entries = [item for item in self.list() if item != entry]
+        self.store.save({"entries": [entry, *entries[: self.limit - 1]]})
+
+    def delete(self, index: int) -> bool:
+        """Delete an entry by its current list index."""
+        entries = self.list()
+        if index < 0 or index >= len(entries):
+            return False
+        del entries[index]
+        self.store.save({"entries": entries})
+        return True
+
+
+class StylePresetStore:
+    """Store named generation presets as sanitized JSON filenames."""
+
+    _safe_name = re.compile(r"[^A-Za-z0-9._-]+")
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+
+    def list(self) -> list[str]:
+        """Return available preset names in stable order."""
+        if not self.directory.exists():
+            return []
+        return sorted(path.stem for path in self.directory.glob("*.json") if path.is_file())
+
+    def save(self, name: str, settings: dict[str, Any]) -> str:
+        """Save a preset and return its sanitized unique name."""
+        safe_name = self._sanitize_name(name)
+        path = self.directory / f"{safe_name}.json"
+        self.directory.mkdir(parents=True, exist_ok=True)
+        JsonStore(path).save(settings)
+        return safe_name
+
+    def load(self, name: str) -> dict[str, Any]:
+        """Load a preset by name."""
+        return JsonStore(self._path_for(name)).load()
+
+    def delete(self, name: str) -> bool:
+        """Delete a preset without affecting other presets."""
+        path = self._path_for(name)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            raise StorageError(f"Unable to delete {path}: {error}") from error
+        return True
+
+    def _path_for(self, name: str) -> Path:
+        safe_name = self._sanitize_name(name)
+        path = (self.directory / f"{safe_name}.json").resolve()
+        if path.parent != self.directory.resolve():
+            raise StorageError("Style name resolves outside the styles directory")
+        return path
+
+    @classmethod
+    def _sanitize_name(cls, name: str) -> str:
+        safe_name = cls._safe_name.sub("-", name.strip()).strip(".-")
+        if not safe_name:
+            raise StorageError("Style name must contain a safe filename character")
+        return safe_name[:100]

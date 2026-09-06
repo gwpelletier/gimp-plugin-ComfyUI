@@ -98,29 +98,35 @@ Acceptance criteria:
 
 ### 5. Dynamic model/resource controls
 
-- [ ] Replace the free-text checkpoint field with a searchable checkpoint selector.
-- [ ] Add a LoRA gallery/list populated from ComfyUI metadata, including strength controls.
-- [ ] Add optional VAE selection where the selected workflow supports it.
-- [ ] Preserve nested model paths exactly as returned by ComfyUI.
-- [ ] Keep metadata discovery asynchronous and provide local fallback values when unavailable.
-- [ ] Add tests for stale metadata, empty node schemas, and endpoint failure while the dialog is open.
+- [x] Replace the free-text checkpoint field with a searchable checkpoint selector.
+- [x] Add a LoRA gallery/list populated from ComfyUI metadata, including strength controls.
+- [x] Add optional VAE selection where the selected workflow supports it.
+- [x] Preserve nested model paths exactly as returned by ComfyUI.
+- [x] Keep metadata discovery asynchronous and provide local fallback values when unavailable.
+- [x] Add tests for stale metadata, empty node schemas, and endpoint failure while the dialog is open.
+
+Implementation status: searchable model selectors, metadata-backed LoRA strength rows, workflow-aware VAE selection, nested path preservation, asynchronous discovery, and local fallback behavior are complete.
 
 ### 6. Prompt history and styles
 
-- [ ] Add a persistent prompt history store with bounded retention.
-- [ ] Add history selection/deletion UI.
-- [ ] Add style preset save/load/delete support for prompts and generation settings.
-- [ ] Sanitize style filenames and avoid collisions.
-- [ ] Add unit tests for retention, malformed history files, duplicate style names, and safe filenames.
-- [ ] Add a GIMP integration flow for save, reload, and apply behavior.
+- [x] Add a persistent prompt history store with bounded retention.
+- [x] Add history selection/deletion UI.
+- [x] Add style preset save/load/delete support for prompts and generation settings.
+- [x] Sanitize style filenames and avoid collisions.
+- [x] Add unit tests for retention, malformed history files, duplicate style names, and safe filenames.
+- [x] Add a GIMP integration flow for save, reload, and apply behavior.
+
+Implementation status: bounded atomic history, selectable history application, style save/load/delete actions, safe names, and embedded-GIMP persistence coverage are complete.
 
 ### 7. Dockable panel
 
-- [ ] Decide whether the generation experience should use a true dockable `GimpUi` panel or retain a modal dialog for the first release.
+- [x] Decide whether the generation experience should use a true dockable `GimpUi` panel or retain a modal dialog for the first release.
 - [ ] If dockable, separate persistent panel state from per-run generation state.
 - [ ] Keep one generation worker per panel and disable conflicting controls while a job is active.
 - [ ] Add UI-state tests where possible without importing GIMP into unit tests.
 - [ ] Add a manual GIMP acceptance checklist for docking, reopening, cancellation, and restart persistence.
+
+Decision: retain the modal dialog for the first release. The existing procedure owns one dialog per invocation, while generation work already runs behind a worker boundary; a dockable panel would add persistent lifecycle and multi-run state before the current workflow is stable enough to justify it.
 
 ## Priority 3: Progress, previews, and batch workflows
 

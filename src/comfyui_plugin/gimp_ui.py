@@ -13,9 +13,10 @@ gi.require_version("GimpUi", "3.0")
 from gi.repository import Gimp, GimpUi, GLib, Gtk
 
 from .client import ComfyUIClient
-from .generation import GenerationCoordinator, GenerationRequest, parse_lora_settings
+from .generation import GenerationCoordinator, GenerationRequest
 from .gimp_image import GimpImageOperations
-from .storage import PluginPaths, WorkflowRegistry
+from .resources import workflow_supports_vae
+from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
 from .workflow import validate_api_workflow, load_workflow
 
 
@@ -30,6 +31,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.plugin_paths = PluginPaths(Path(Gimp.directory()) / "comfyui")
         self.plugin_paths.ensure()
         self.workflow_registry = WorkflowRegistry(self.plugin_paths.workflow_registry)
+        self.prompt_history = PromptHistory(self.plugin_paths.prompt_history)
+        self.style_presets = StylePresetStore(self.plugin_paths.styles)
         self.worker: threading.Thread | None = None
         self.active_client: ComfyUIClient | None = None
         self.active_coordinator: GenerationCoordinator | None = None
@@ -49,16 +52,17 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._refresh_workflow_selector()
         self.prompt = self._add_entry(grid, 2, "Prompt", "")
         self.negative_prompt = self._add_entry(grid, 3, "Negative prompt", "")
-        self.checkpoint = self._add_entry(grid, 4, "Checkpoint", "")
-        self.loras = self._add_entry(grid, 5, "LoRAs", "")
-        self.steps = self._add_spin(grid, 6, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 7, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 8, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 9, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 10, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 11, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.checkpoint = self._add_searchable_combo(grid, 4, "Checkpoint")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 5)
+        self.vae = self._add_searchable_combo(grid, 6, "VAE")
+        self.steps = self._add_spin(grid, 7, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 8, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 9, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 10, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 11, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 12, "Scheduler", ["normal", "karras", "simple"], "normal")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 12, 2, 1)
+        grid.attach(self.status, 0, 13, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -68,6 +72,22 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         generate.connect("clicked", self._on_generate)
         action_area.pack_start(generate, False, False, 0)
         self.generate_button = generate
+
+        history_button = Gtk.Button(label="History")
+        history_button.connect("clicked", self._show_history)
+        action_area.pack_start(history_button, False, False, 0)
+        delete_history_button = Gtk.Button(label="Delete History")
+        delete_history_button.connect("clicked", self._delete_latest_history)
+        action_area.pack_start(delete_history_button, False, False, 0)
+        style_button = Gtk.Button(label="Save Style")
+        style_button.connect("clicked", self._save_current_style)
+        action_area.pack_start(style_button, False, False, 0)
+        load_style_button = Gtk.Button(label="Load Style")
+        load_style_button.connect("clicked", self._load_latest_style)
+        action_area.pack_start(load_style_button, False, False, 0)
+        delete_style_button = Gtk.Button(label="Delete Style")
+        delete_style_button.connect("clicked", self._delete_latest_style)
+        action_area.pack_start(delete_style_button, False, False, 0)
 
         self.show_all()
         self._load_remote_options()
@@ -99,6 +119,131 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.attach(box, 1, row, 1, 1)
         return selector
 
+    @staticmethod
+    def _add_searchable_combo(grid: Gtk.Grid, row: int, label_text: str) -> Gtk.ComboBoxText:
+        label = Gtk.Label(label=label_text, xalign=0)
+        combo = Gtk.ComboBoxText.new_with_entry()
+        combo.set_hexpand(True)
+        grid.attach(label, 0, row, 1, 1)
+        grid.attach(combo, 1, row, 1, 1)
+        return combo
+
+    def _add_lora_controls(self, grid: Gtk.Grid, row: int):
+        label = Gtk.Label(label="LoRAs", xalign=0)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        selector = Gtk.ComboBoxText.new_with_entry()
+        selector.set_hexpand(True)
+        strength = Gtk.SpinButton.new_with_range(-10.0, 10.0, 0.05)
+        strength.set_value(1.0)
+        add_button = Gtk.Button(label="Add")
+        rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        controls.pack_start(selector, True, True, 0)
+        controls.pack_start(strength, False, False, 0)
+        controls.pack_start(add_button, False, False, 0)
+        box.pack_start(controls, False, False, 0)
+        box.pack_start(rows, False, False, 0)
+        add_button.connect("clicked", lambda _button: self._add_lora_row(selector, strength, rows))
+        grid.attach(label, 0, row, 1, 1)
+        grid.attach(box, 1, row, 1, 1)
+        return selector, strength, rows
+
+    def _add_lora_row(self, selector: Gtk.ComboBoxText, strength: Gtk.SpinButton, rows: Gtk.Box) -> None:
+        name = selector.get_child().get_text().strip()
+        if not name:
+            return
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row_name = Gtk.Label(label=name, xalign=0)
+        row_name.set_hexpand(True)
+        row_strength = Gtk.SpinButton.new_with_range(-10.0, 10.0, 0.05)
+        row_strength.set_value(strength.get_value())
+        remove = Gtk.Button(label="Remove")
+        row.pack_start(row_name, True, True, 0)
+        row.pack_start(row_strength, False, False, 0)
+        row.pack_start(remove, False, False, 0)
+        row._lora_name = name
+        row._lora_strength = row_strength
+        remove.connect("clicked", lambda _button: rows.remove(row))
+        rows.pack_start(row, False, False, 0)
+        rows.show_all()
+
+    def _selected_loras(self) -> dict[str, float]:
+        return {
+            row._lora_name: row._lora_strength.get_value()
+            for row in self.lora_rows.get_children()
+        }
+
+    def _settings_snapshot(self) -> dict:
+        """Return dialog values that can be stored as history or a style."""
+        return {
+            "prompt": self.prompt.get_text(),
+            "negative_prompt": self.negative_prompt.get_text(),
+            "checkpoint": self.checkpoint.get_child().get_text(),
+            "vae": self.vae.get_child().get_text(),
+            "loras": self._selected_loras(),
+            "steps": self.steps.get_value_as_int(),
+            "cfg": self.cfg.get_value(),
+            "denoise": self.denoise.get_value(),
+            "seed": self.seed.get_value_as_int(),
+            "sampler": self.sampler.get_active_text(),
+            "scheduler": self.scheduler.get_active_text(),
+        }
+
+    def _apply_settings(self, settings: dict) -> None:
+        """Apply stored prompt and generation values to the dialog."""
+        self.prompt.set_text(str(settings.get("prompt", "")))
+        self.negative_prompt.set_text(str(settings.get("negative_prompt", "")))
+        self.checkpoint.get_child().set_text(str(settings.get("checkpoint", "")))
+        self.vae.get_child().set_text(str(settings.get("vae", "")))
+        self.steps.set_value(float(settings.get("steps", 20)))
+        self.cfg.set_value(float(settings.get("cfg", 8.0)))
+        self.denoise.set_value(float(settings.get("denoise", 1.0)))
+        self.seed.set_value(float(settings.get("seed", -1)))
+        for combo, key in ((self.sampler, "sampler"), (self.scheduler, "scheduler")):
+            value = settings.get(key)
+            if value:
+                self._replace_combo_options(combo, [value])
+
+    def _delete_latest_history(self, _button: Gtk.Button) -> None:
+        if self.prompt_history.delete(0):
+            self.status.set_text("History entry deleted")
+
+    def _load_latest_style(self, _button: Gtk.Button) -> None:
+        names = self.style_presets.list()
+        if names:
+            self._apply_settings(self.style_presets.load(names[0]))
+            self.status.set_text("Loaded style")
+        else:
+            self.status.set_text("No saved styles")
+
+    def _delete_latest_style(self, _button: Gtk.Button) -> None:
+        names = self.style_presets.list()
+        if names and self.style_presets.delete(names[0]):
+            self.status.set_text("Style deleted")
+
+    def _show_history(self, _button: Gtk.Button) -> None:
+        entries = self.prompt_history.list()
+        if not entries:
+            self.status.set_text("No prompt history")
+            return
+        dialog = Gtk.Dialog(title="Prompt History", transient_for=self, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_APPLY, Gtk.ResponseType.OK)
+        selector = Gtk.ComboBoxText()
+        for entry in entries:
+            selector.append_text(str(entry.get("prompt", "(empty prompt)")))
+        selector.set_active(0)
+        dialog.get_content_area().pack_start(selector, True, True, 12)
+        dialog.show_all()
+        if dialog.run() == Gtk.ResponseType.OK:
+            self._apply_settings(entries[selector.get_active()])
+            self.status.set_text("History entry applied")
+        dialog.destroy()
+
+    def _save_current_style(self, _button: Gtk.Button) -> None:
+        name = self.prompt.get_text().strip() or "untitled"
+        self.style_presets.save(name, self._settings_snapshot())
+        self.status.set_text("Style saved")
+
     def _ensure_default_workflows(self) -> None:
         """Register the workflows shipped with the plug-in."""
         workflow_directory = Path(__file__).resolve().parents[2] / "workflows"
@@ -115,11 +260,23 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         selected = self.workflow_registry.selected_path or (workflows[0]["path"] if workflows else None)
         if selected is not None:
             self.workflow_selector.set_active_id(selected)
+        self._update_vae_support()
 
     def _on_workflow_changed(self, selector: Gtk.ComboBoxText) -> None:
         selected = selector.get_active_id()
         if selected:
             self.workflow_registry.select(selected)
+        self._update_vae_support()
+
+    def _update_vae_support(self) -> None:
+        selected = self.workflow_selector.get_active_id()
+        if not selected:
+            self.vae.set_sensitive(False)
+            return
+        try:
+            self.vae.set_sensitive(workflow_supports_vae(load_workflow(selected)))
+        except Exception:
+            self.vae.set_sensitive(False)
 
     def _choose_workflows(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserDialog(
@@ -163,6 +320,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             client = ComfyUIClient(endpoint, timeout=10)
             options = {
                 "checkpoints": client.get_available_checkpoints(),
+                "loras": client.get_available_loras(),
+                "vaes": client.get_available_vaes(),
                 "samplers": client.get_available_samplers(),
                 "schedulers": client.get_available_schedulers(),
             }
@@ -172,8 +331,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _apply_remote_options(self, options: dict[str, list[str]]) -> bool:
         """Apply background ComfyUI metadata on the GTK main thread."""
-        if options["checkpoints"] and not self.checkpoint.get_text():
-            self.checkpoint.set_text(options["checkpoints"][0])
+        self._replace_combo_options(self.checkpoint, options["checkpoints"])
+        self._replace_combo_options(self.lora_selector, options["loras"])
+        self._replace_combo_options(self.vae, options["vaes"])
         self._replace_combo_options(self.sampler, options["samplers"])
         self._replace_combo_options(self.scheduler, options["schedulers"])
         return False
@@ -232,9 +392,10 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             settings = {
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
-                "checkpoint": self.checkpoint.get_text() or None,
+                "checkpoint": self.checkpoint.get_child().get_text() or None,
+                "vae": self.vae.get_child().get_text() or None,
                 "workflow_path": workflow_path,
-                "loras": parse_lora_settings(self.loras.get_text()),
+                "loras": self._selected_loras(),
                 "seed": self.seed.get_value_as_int(),
                 "steps": self.steps.get_value_as_int(),
                 "cfg": self.cfg.get_value(),
@@ -242,6 +403,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "scheduler": self.scheduler.get_active_text(),
                 "denoise": self.denoise.get_value(),
             }
+            self.prompt_history.add(self._settings_snapshot())
         except Exception as error:
             self.status.set_text(f"Error: {error}")
             return
@@ -295,6 +457,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     prompt=settings["prompt"],
                     negative_prompt=settings["negative_prompt"],
                     checkpoint=settings["checkpoint"],
+                    vae=settings["vae"],
                     input_image=uploaded_name,
                     mask_image=uploaded_mask_name,
                     seed=settings["seed"],

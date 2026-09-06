@@ -101,6 +101,7 @@ def apply_generation_parameters(
     positive_prompt: str | None = None,
     negative_prompt: str | None = None,
     checkpoint: str | None = None,
+    vae: str | None = None,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -131,6 +132,7 @@ def apply_generation_parameters(
         "prompt": positive_prompt,
         "negative_prompt": negative_prompt,
         "checkpoint": checkpoint,
+        "vae": vae,
         "seed": seed,
         "width": width,
         "height": height,
@@ -149,6 +151,8 @@ def apply_generation_parameters(
             inputs["ckpt_name"] = checkpoint
         if class_type == "LoadImage" and input_image is not None:
             inputs["image"] = input_image
+        if class_type == "VAELoader" and vae is not None:
+            inputs["vae_name"] = vae
         for key, value in {
             "seed": seed,
             "noise_seed": seed,

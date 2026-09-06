@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from comfyui_plugin.storage import JsonStore, PluginPaths, StorageError, WorkflowRegistry
+from comfyui_plugin.storage import (
+    JsonStore,
+    PluginPaths,
+    PromptHistory,
+    StorageError,
+    StylePresetStore,
+    WorkflowRegistry,
+)
 
 
 class TestPluginPaths:
@@ -101,6 +108,84 @@ class TestWorkflowRegistry:
         # Assert
         assert selected_path == str(workflow_path.resolve())
         assert registry.selected_path is None
+
+
+class TestPromptHistory:
+    def test_adds_new_entries_first_and_retains_only_the_limit(self, tmp_path):
+        # Arrange
+        history = PromptHistory(tmp_path / "history.json", limit=2)
+
+        # Act
+        history.add({"prompt": "first"})
+        history.add({"prompt": "second"})
+        history.add({"prompt": "third"})
+
+        # Assert
+        assert history.list() == [{"prompt": "third"}, {"prompt": "second"}]
+
+    def test_rejects_malformed_entries(self, tmp_path):
+        # Arrange
+        path = tmp_path / "history.json"
+        path.write_text('{"entries": ["not an object"]}', encoding="utf-8")
+
+        # Act
+        with pytest.raises(StorageError, match="prompt history"):
+            PromptHistory(path).list()
+
+        # Assert
+        assert path.exists()
+
+    def test_deletes_valid_entry_and_ignores_unknown_index(self, tmp_path):
+        # Arrange
+        history = PromptHistory(tmp_path / "history.json")
+        history.add({"prompt": "keep"})
+
+        # Act
+        deleted = history.delete(0)
+        missing = history.delete(0)
+
+        # Assert
+        assert deleted
+        assert not missing
+        assert history.list() == []
+
+
+class TestStylePresetStore:
+    def test_sanitizes_names_and_round_trips_settings(self, tmp_path):
+        # Arrange
+        styles = StylePresetStore(tmp_path / "styles")
+
+        # Act
+        name = styles.save("  portrait / soft light  ", {"prompt": "portrait"})
+
+        # Assert
+        assert name == "portrait-soft-light"
+        assert styles.list() == [name]
+        assert styles.load(name) == {"prompt": "portrait"}
+
+    def test_overwrites_same_sanitized_name_without_collision(self, tmp_path):
+        # Arrange
+        styles = StylePresetStore(tmp_path / "styles")
+        styles.save("cinematic", {"steps": 10})
+
+        # Act
+        styles.save("cinematic", {"steps": 20})
+
+        # Assert
+        assert styles.list() == ["cinematic"]
+        assert styles.load("cinematic")["steps"] == 20
+
+    def test_rejects_empty_safe_name_and_handles_missing_delete(self, tmp_path):
+        # Arrange
+        styles = StylePresetStore(tmp_path / "styles")
+
+        # Act
+        with pytest.raises(StorageError, match="safe filename"):
+            styles.save("...", {})
+        deleted = styles.delete("missing")
+
+        # Assert
+        assert not deleted
 
     def test_rejects_selecting_unregistered_path(self, tmp_path):
         # Arrange
