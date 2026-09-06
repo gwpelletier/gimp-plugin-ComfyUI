@@ -59,6 +59,9 @@ class GenerationRequest:
     negative_prompt: str
     checkpoint: str | None = None
     vae: str | None = None
+    unet: str | None = None
+    clip_l: str | None = None
+    clip_t5: str | None = None
     input_image: str | None = None
     mask_image: str | None = None
     seed: int = -1
@@ -164,6 +167,9 @@ class GenerationCoordinator:
             negative_prompt=request.negative_prompt,
             checkpoint=request.checkpoint,
             vae=request.vae,
+            unet=request.unet,
+            clip_l=request.clip_l,
+            clip_t5=request.clip_t5,
             seed=seed,
             width=request.width,
             height=request.height,

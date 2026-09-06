@@ -17,7 +17,12 @@ from .client import ComfyUIEvent, ComfyUIEventType
 from .generation import GenerationCoordinator, GenerationRequest
 from .gimp_image import GimpImageOperations
 from .export import ExportError, ImageExporter
-from .resources import CheckpointType, checkpoint_profile, workflow_supports_vae
+from .resources import (
+    CheckpointType,
+    checkpoint_profile,
+    validate_checkpoint_workflow,
+    workflow_supports_vae,
+)
 from .storage import PluginPaths, PromptHistory, StylePresetStore, WorkflowRegistry
 from .workflow import validate_api_workflow, load_workflow
 
@@ -56,26 +61,29 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.prompt = self._add_entry(grid, 2, "Prompt", "")
         self.negative_prompt = self._add_entry(grid, 3, "Negative prompt", "")
         self.checkpoint, self.checkpoint_type = self._add_checkpoint_controls(grid, 4)
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 5)
-        self.vae = self._add_searchable_combo(grid, 6, "VAE")
+        self.unet = self._add_searchable_combo(grid, 5, "UNET")
+        self.clip_l = self._add_searchable_combo(grid, 6, "Flux CLIP L")
+        self.clip_t5 = self._add_searchable_combo(grid, 7, "Flux T5")
+        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 8)
+        self.vae = self._add_searchable_combo(grid, 9, "VAE")
         self._update_vae_support()
-        self.steps = self._add_spin(grid, 7, "Steps", 20, 1, 200, 1)
-        self.cfg = self._add_spin(grid, 8, "CFG", 8.0, 1.0, 30.0, 0.5)
-        self.denoise = self._add_spin(grid, 9, "Denoise", 1.0, 0.0, 1.0, 0.05)
-        self.seed = self._add_spin(grid, 10, "Seed", -1, -1, 4294967295, 1)
-        self.sampler = self._add_combo(grid, 11, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
-        self.scheduler = self._add_combo(grid, 12, "Scheduler", ["normal", "karras", "simple"], "normal")
+        self.steps = self._add_spin(grid, 10, "Steps", 20, 1, 200, 1)
+        self.cfg = self._add_spin(grid, 11, "CFG", 8.0, 1.0, 30.0, 0.5)
+        self.denoise = self._add_spin(grid, 12, "Denoise", 1.0, 0.0, 1.0, 0.05)
+        self.seed = self._add_spin(grid, 13, "Seed", -1, -1, 4294967295, 1)
+        self.sampler = self._add_combo(grid, 14, "Sampler", ["euler", "euler_ancestral", "dpmpp_2m"], "euler")
+        self.scheduler = self._add_combo(grid, 15, "Scheduler", ["normal", "karras", "simple"], "normal")
         self._profile_defaults = {"steps": 20, "cfg": 8.0, "sampler": "euler", "scheduler": "normal"}
         self.output_mode = self._add_combo(
             grid,
-            13,
+            16,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
-        self.output_directory = self._add_entry(grid, 14, "Export directory", "")
+        self.output_directory = self._add_entry(grid, 17, "Export directory", "")
         self.status = Gtk.Label(label="Ready", xalign=0)
-        grid.attach(self.status, 0, 15, 2, 1)
+        grid.attach(self.status, 0, 18, 2, 1)
 
         action_area = self.get_action_area()
         cancel = Gtk.Button(label="Cancel")
@@ -105,6 +113,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.show_all()
         self.checkpoint.get_child().connect("changed", self._on_checkpoint_changed)
         self.checkpoint_type.connect("changed", self._on_checkpoint_profile_changed)
+        self._update_model_resource_support()
         self._apply_checkpoint_profile()
         if self.eraser_mode:
             self._configure_eraser_defaults()
@@ -215,6 +224,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             "negative_prompt": self.negative_prompt.get_text(),
             "checkpoint": self.checkpoint.get_child().get_text(),
             "checkpoint_type": self.checkpoint_type.get_active_text(),
+            "unet": self.unet.get_child().get_text(),
+            "clip_l": self.clip_l.get_child().get_text(),
+            "clip_t5": self.clip_t5.get_child().get_text(),
             "vae": self.vae.get_child().get_text(),
             "loras": self._selected_loras(),
             "steps": self.steps.get_value_as_int(),
@@ -234,6 +246,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         profile_values = [item.value for item in CheckpointType]
         if checkpoint_type in profile_values:
             self.checkpoint_type.set_active(profile_values.index(checkpoint_type))
+        self.unet.get_child().set_text(str(settings.get("unet", "")))
+        self.clip_l.get_child().set_text(str(settings.get("clip_l", "")))
+        self.clip_t5.get_child().set_text(str(settings.get("clip_t5", "")))
         self.vae.get_child().set_text(str(settings.get("vae", "")))
         self.steps.set_value(float(settings.get("steps", 20)))
         self.cfg.set_value(float(settings.get("cfg", 8.0)))
@@ -290,6 +305,10 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.workflow_registry.add([
             workflow_directory / "image-edit-api.json",
             workflow_directory / "inpainting-api.json",
+            workflow_directory / "sdxl-image-edit-api.json",
+            workflow_directory / "sdxl-inpainting-api.json",
+            workflow_directory / "flux-image-edit-api.json",
+            workflow_directory / "flux-inpainting-api.json",
         ])
 
     def _configure_eraser_defaults(self) -> None:
@@ -315,12 +334,14 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         if selected is not None:
             self.workflow_selector.set_active_id(selected)
         self._update_vae_support()
+        self._update_model_resource_support()
 
     def _on_workflow_changed(self, selector: Gtk.ComboBoxText) -> None:
         selected = selector.get_active_id()
         if selected:
             self.workflow_registry.select(selected)
         self._update_vae_support()
+        self._update_model_resource_support()
         self._apply_checkpoint_profile()
 
     def _on_checkpoint_changed(self, _entry: Gtk.Entry) -> None:
@@ -370,6 +391,23 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         except Exception:
             self.vae.set_sensitive(False)
 
+    def _update_model_resource_support(self) -> None:
+        if not hasattr(self, "unet"):
+            return
+        selected = self.workflow_selector.get_active_id()
+        if not selected:
+            for control in (self.unet, self.clip_l, self.clip_t5):
+                control.set_sensitive(False)
+            return
+        try:
+            workflow = load_workflow(selected)
+            classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
+        except (OSError, ValueError):
+            classes = set()
+        is_flux = "UNETLoader" in classes or "DualCLIPLoader" in classes
+        for control in (self.unet, self.clip_l, self.clip_t5):
+            control.set_sensitive(is_flux)
+
     def _choose_workflows(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserDialog(
             title="Import ComfyUI API Workflows",
@@ -412,6 +450,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             client = ComfyUIClient(endpoint, timeout=10)
             options = {
                 "checkpoints": client.get_available_checkpoints(),
+                "unets": client.get_available_unets(),
+                "clips": client.get_available_clip_models(),
                 "loras": client.get_available_loras(),
                 "vaes": client.get_available_vaes(),
                 "samplers": client.get_available_samplers(),
@@ -424,6 +464,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _apply_remote_options(self, options: dict[str, list[str]]) -> bool:
         """Apply background ComfyUI metadata on the GTK main thread."""
         self._replace_combo_options(self.checkpoint, options["checkpoints"])
+        self._replace_combo_options(self.unet, options["unets"])
+        self._replace_combo_options(self.clip_l, options["clips"])
+        self._replace_combo_options(self.clip_t5, options["clips"])
         self._replace_combo_options(self.lora_selector, options["loras"])
         self._replace_combo_options(self.vae, options["vaes"])
         self._replace_combo_options(self.sampler, options["samplers"])
@@ -506,6 +549,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             if self.eraser_mode and (self.image is None or Gimp.Selection.is_empty(self.image)):
                 raise ValueError("Paint an erase area with GIMP's brush before generating")
             workflow = load_workflow(workflow_path)
+            profile = checkpoint_profile(
+                workflow,
+                self.checkpoint.get_child().get_text(),
+                CheckpointType(self.checkpoint_type.get_active_text() or CheckpointType.AUTO.value),
+            )
+            validate_checkpoint_workflow(profile.checkpoint_type, workflow)
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client
             coordinator = GenerationCoordinator(client)
@@ -518,6 +567,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_child().get_text() or None,
                 "checkpoint_type": self.checkpoint_type.get_active_text(),
+                "unet": self.unet.get_child().get_text() or None,
+                "clip_l": self.clip_l.get_child().get_text() or None,
+                "clip_t5": self.clip_t5.get_child().get_text() or None,
                 "vae": self.vae.get_child().get_text() or None,
                 "workflow_path": workflow_path,
                 "loras": self._selected_loras(),
@@ -586,6 +638,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                     negative_prompt=settings["negative_prompt"],
                     checkpoint=settings["checkpoint"],
                     vae=settings["vae"],
+                    unet=settings["unet"],
+                    clip_l=settings["clip_l"],
+                    clip_t5=settings["clip_t5"],
                     input_image=uploaded_name,
                     mask_image=uploaded_mask_name,
                     seed=settings["seed"],

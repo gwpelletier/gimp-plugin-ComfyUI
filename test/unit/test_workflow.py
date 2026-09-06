@@ -55,6 +55,33 @@ class TestValidateWorkflowCompatibility:
         # Assert
         assert workflow["1"]["inputs"]["upload"] == "image"
 
+    def test_resolves_flux_resources_in_bundled_workflow(self):
+        # Arrange
+        workflow = load_workflow("workflows/flux-image-edit-api.json")
+
+        # Act
+        resolved = apply_generation_parameters(
+            workflow,
+            input_image="uploads/source.png",
+            positive_prompt="portrait",
+            negative_prompt="blurry",
+            unet="flux/flux1-dev-fp8-e4m3fn.safetensors",
+            clip_l="flux/clip_l.safetensors",
+            clip_t5="flux/t5xxl_fp8_e4m3fn.safetensors",
+            vae="flux/ae.safetensors",
+            seed=42,
+            steps=20,
+            cfg=3.5,
+            sampler="euler",
+            scheduler="normal",
+            denoise=0.8,
+        )
+
+        # Assert
+        assert resolved["1"]["inputs"]["unet_name"] == "flux/flux1-dev-fp8-e4m3fn.safetensors"
+        assert resolved["2"]["inputs"]["clip_name2"] == "flux/t5xxl_fp8_e4m3fn.safetensors"
+        assert all("{{" not in str(value) for node in resolved.values() for value in node["inputs"].values())
+
 
 class TestApplyParameters:
     def test_apply_parameters_replaces_markers_without_mutating_template(self):

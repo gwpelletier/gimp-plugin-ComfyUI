@@ -139,6 +139,9 @@ def apply_generation_parameters(
     negative_prompt: str | None = None,
     checkpoint: str | None = None,
     vae: str | None = None,
+    unet: str | None = None,
+    clip_l: str | None = None,
+    clip_t5: str | None = None,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -170,6 +173,9 @@ def apply_generation_parameters(
         "negative_prompt": negative_prompt,
         "checkpoint": checkpoint,
         "vae": vae,
+        "unet": unet,
+        "clip_l": clip_l,
+        "clip_t5": clip_t5,
         "seed": seed,
         "width": width,
         "height": height,
@@ -190,6 +196,13 @@ def apply_generation_parameters(
             inputs["image"] = input_image
         if class_type == "VAELoader" and vae is not None:
             inputs["vae_name"] = vae
+        if class_type == "UNETLoader" and unet is not None:
+            inputs["unet_name"] = unet
+        if class_type == "DualCLIPLoader":
+            if clip_l is not None:
+                inputs["clip_name1"] = clip_l
+            if clip_t5 is not None:
+                inputs["clip_name2"] = clip_t5
         for key, value in {
             "seed": seed,
             "noise_seed": seed,

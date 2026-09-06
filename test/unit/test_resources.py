@@ -1,8 +1,11 @@
+import pytest
+
 from comfyui_plugin.resources import (
     CheckpointType,
     checkpoint_profile,
     filter_options,
     infer_checkpoint_type,
+    validate_checkpoint_workflow,
     workflow_supports_vae,
 )
 
@@ -86,3 +89,11 @@ class TestCheckpointProfiles:
         # Assert
         assert profile.checkpoint_type == CheckpointType.SDXL
         assert profile.confidence == "high"
+
+    def test_rejects_flux_checkpoint_with_classic_workflow(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}}}
+
+        # Act
+        with pytest.raises(ValueError, match="UNETLoader and DualCLIPLoader"):
+            validate_checkpoint_workflow(CheckpointType.FLUX, workflow)

@@ -211,6 +211,14 @@ class ComfyUIClient:
         """Return VAE names advertised by the ComfyUI node schema."""
         return self.get_node_input_options("VAELoader", "vae_name")
 
+    def get_available_unets(self) -> list[str]:
+        """Return diffusion UNET names advertised by ComfyUI."""
+        return self.get_node_input_options("UNETLoader", "unet_name")
+
+    def get_available_clip_models(self) -> list[str]:
+        """Return dual-CLIP resource names advertised by ComfyUI."""
+        return self.get_node_input_options("DualCLIPLoader", "clip_name1")
+
     def get_available_samplers(self) -> list[str]:
         """Return sampler names advertised by the ComfyUI node schema."""
         return self.get_node_input_options("KSampler", "sampler_name")

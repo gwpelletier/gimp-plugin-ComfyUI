@@ -94,3 +94,12 @@ def checkpoint_profile(
         confidence="high" if workflow_signal else "medium",
         source="workflow" if workflow_signal else "checkpoint name",
     )
+
+
+def validate_checkpoint_workflow(checkpoint_type: CheckpointType, workflow: dict[str, Any]) -> None:
+    """Reject a model/workflow family mismatch before queueing work."""
+    classes = {node.get("class_type") for node in workflow.values() if isinstance(node, dict)}
+    if checkpoint_type == CheckpointType.FLUX and not {"UNETLoader", "DualCLIPLoader"} <= classes:
+        raise ValueError("Flux models require a workflow with UNETLoader and DualCLIPLoader")
+    if checkpoint_type == CheckpointType.SDXL and "CLIPTextEncodeSDXL" not in classes:
+        raise ValueError("SDXL models require a workflow with CLIPTextEncodeSDXL nodes")

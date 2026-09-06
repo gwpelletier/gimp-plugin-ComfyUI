@@ -30,5 +30,10 @@ class TestBuildManifest:
             assert "gimp-comfyui/gimp-comfyui.py" in names
             assert "gimp-comfyui/comfyui_plugin/client.py" in names
             assert "gimp-comfyui/workflows/image-edit-api.json" in names
+            assert "gimp-comfyui/workflows/inpainting-api.json" in names
+            assert "gimp-comfyui/workflows/sdxl-image-edit-api.json" in names
+            assert "gimp-comfyui/workflows/sdxl-inpainting-api.json" in names
+            assert "gimp-comfyui/workflows/flux-image-edit-api.json" in names
+            assert "gimp-comfyui/workflows/flux-inpainting-api.json" in names
             assert "gimp-comfyui/LICENSE" in names
             assert not any(name.endswith((".pyc", ".pyo")) or "__pycache__" in name for name in names)

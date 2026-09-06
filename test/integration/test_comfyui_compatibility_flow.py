@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -14,11 +15,13 @@ class TestComfyUICompatibilityFlow:
     def test_bundled_workflow_matches_live_node_and_resource_schema(self):
         # Arrange
         client = ComfyUIClient(os.environ["COMFYUI_URL"], timeout=10)
-        workflow = load_workflow("workflows/image-edit-api.json")
+        workflow_paths = sorted(Path("workflows").glob("*-api.json"))
 
         # Act
-        client.validate_workflow(workflow)
+        for workflow_path in workflow_paths:
+            client.validate_workflow(load_workflow(workflow_path))
         stats = client.get_system_stats()
 
         # Assert
+        assert len(workflow_paths) >= 6
         assert stats["system"]["comfyui_version"]
