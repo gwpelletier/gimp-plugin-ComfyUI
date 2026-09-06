@@ -16,11 +16,13 @@ Run:
 ```sh
 COMFYUI_URL=http://127.0.0.1:8188 \
 COMFYUI_MASK_WORKFLOW=workflows/inpainting-api.json \
-COMFYUI_TEST_IMAGE=/path/to/source.png \
-COMFYUI_TEST_MASK=/path/to/mask.png \
-COMFYUI_CHECKPOINT=path/to/checkpoint.safetensors \
+COMFYUI_TEST_IMAGE=test/fixtures/priority-1/source.png \
+COMFYUI_TEST_MASK=test/fixtures/priority-1/mask.png \
+COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
 python -m pytest test/integration/test_comfyui_inpainting_flow.py
 ```
+
+The bundled dummy PNGs are only deterministic transport fixtures; they are not intended to represent a useful image-editing prompt. The checkpoint name above was read from the local ComfyUI `/object_info` response on ComfyUI 0.34.0. Re-run that query if the local model inventory changes.
 
 The test uploads both files, injects `LoadImageMask` into the workflow's mask consumers, queues the graph, downloads the first output, and verifies the PNG signature. A successful run closes the remaining live ComfyUI gate in Priority 1 section 1.
 
