@@ -121,6 +121,37 @@ GIMP-specific interactive behavior must be validated with a configured GIMP 3 in
 - Confirm the package version comes from `src/comfyui_plugin/__init__.py` and review any new dependency for GPL compatibility and license notices.
 - Run the Linux, macOS, Windows, Flatpak, and AppImage installation-path tests or record the platform-specific acceptance result.
 
+
+
+
+## Commit messages and releases
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) for every
+commit. The accepted format is `<type>[optional scope]: <description>`, with
+types such as `feat`, `fix`, `docs`, `refactor`, `test`, `build`, and `ci`.
+Breaking changes use a `!` after the type or scope, or a `BREAKING CHANGE:`
+footer. Commit headers must be no longer than 100 characters.
+
+Pull requests validate all included commits with commitlint. Merges to `main`
+are processed by Release Please, which determines the next semantic version,
+updates `src/comfyui_plugin/__init__.py`, and opens or updates a release pull
+request with the changelog. Merge that release pull request to create the GitHub
+release and version tag.
+
+Use short-lived branches named `<type>/<short-name>`, such as
+`feature/inpainting-controls`, `fix/websocket-timeout`, or `docs/release-process`.
+Open pull requests against `main`; do not use a long-lived `develop` or release
+branch. Release Please branches and Dependabot branches are managed exceptions.
+
+Protect `main` in the GitHub repository settings for non-admin contributors by
+requiring pull requests, the `CI / test-and-build (3.10)` and
+`CI / test-and-build (3.12)` checks, `Commit messages / commitlint`, and
+`Branch policy / branch-name`. Approvals remain optional because this repository
+has a solo maintainer. Require branches to be up to date, resolve conversations,
+disable force pushes, and use squash merges with a Conventional Commit pull
+request title. Repository administrators may bypass these protections when
+necessary; other contributors may not.
+
 ## Change expectations
 
 Keep GIMP bindings at the application boundary, ComfyUI HTTP behavior in the client, and workflow transformation in workflow modules. Add unit coverage for local behavior and integration-flow coverage when a change crosses a real GIMP or ComfyUI boundary.

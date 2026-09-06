@@ -1,0 +1,24 @@
+name: Branch policy
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          case "$BRANCH_NAME" in
+            release-please--*|dependabot/*)
+              exit 0
+              ;;
+          esac
+
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|fix|docs|chore|refactor|test|build|ci)/[a-z0-9][a-z0-9._-]*$ ]]; then
+            echo "Branch must match <type>/<short-name>, for example feature/inpainting-controls."
+            exit 1
+          fi
