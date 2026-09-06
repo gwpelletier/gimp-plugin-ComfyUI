@@ -144,10 +144,11 @@ Open pull requests against `main`; do not use a long-lived `develop` or release
 branch. Release Please branches and Dependabot branches are managed exceptions.
 
 Protect `main` in the GitHub repository settings by requiring pull requests,
-approvals, the `CI / test-and-build (3.10)` and `CI / test-and-build (3.12)`
-checks, `Commit messages / commitlint`, and `Branch policy / branch-name`.
-Require branches to be up to date, dismiss stale approvals, disable force
-pushes, and use squash merges with a Conventional Commit pull request title.
+the `CI / test-and-build (3.10)` and `CI / test-and-build (3.12)` checks,
+`Commit messages / commitlint`, and `Branch policy / branch-name`. Approvals
+remain optional because this repository has a solo maintainer. Require branches
+to be up to date, resolve conversations, disable force pushes, and use squash
+merges with a Conventional Commit pull request title.
 
 ## Change expectations
 
