@@ -29,6 +29,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.image_operations = GimpImageOperations()
         self.worker: threading.Thread | None = None
         self.active_client: ComfyUIClient | None = None
+        self.active_coordinator: GenerationCoordinator | None = None
+        self.cancel_requested = False
         self.completed = False
         self._build_ui()
 
@@ -172,11 +174,16 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             workflow = load_workflow(self.workflow_path.get_text())
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client
+            coordinator = GenerationCoordinator(client)
+            self.active_coordinator = coordinator
+            self.cancel_requested = False
             input_path = self._stage_input_image()
+            mask_path = self._stage_mask_image()
             settings = {
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_text() or None,
+                "workflow_path": self.workflow_path.get_text(),
                 "loras": parse_lora_settings(self.loras.get_text()),
                 "seed": self.seed.get_value_as_int(),
                 "steps": self.steps.get_value_as_int(),
@@ -193,7 +200,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.status.set_text("Submitting...")
         self.worker = threading.Thread(
             target=self._run_worker,
-            args=(client, workflow, input_path, settings),
+            args=(client, coordinator, workflow, input_path, settings, mask_path),
             daemon=True,
         )
         self.worker.start()
@@ -205,19 +212,41 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         paths.ensure()
         return self.image_operations.save_image(self.image, paths.temporary_images / "main_input.png")
 
-    def _run_worker(self, client: ComfyUIClient, workflow: dict, input_path: Path | None, settings: dict) -> None:
+    def _stage_mask_image(self) -> Path | None:
+        if self.image is None or not self.image.is_valid():
+            return None
+        paths = PluginPaths(Path(Gimp.directory()) / "comfyui")
+        paths.ensure()
+        return self.image_operations.create_mask(self.image, paths.temporary_images)
+
+    def _run_worker(
+        self,
+        client: ComfyUIClient,
+        coordinator: GenerationCoordinator,
+        workflow: dict,
+        input_path: Path | None,
+        settings: dict,
+        mask_path: Path | None,
+    ) -> None:
         try:
             uploaded_name = None
             if input_path is not None:
                 uploaded = client.upload_image(input_path, subfolder="gimp_uploads")
                 uploaded_name = "/".join(part for part in (uploaded.subfolder, uploaded.filename) if part)
-            result = GenerationCoordinator(client).run(
+            uploaded_mask_name = None
+            if mask_path is not None:
+                uploaded_mask = client.upload_image(mask_path, subfolder="gimp_uploads")
+                uploaded_mask_name = "/".join(
+                    part for part in (uploaded_mask.subfolder, uploaded_mask.filename) if part
+                )
+            result = coordinator.run(
                 GenerationRequest(
                     workflow=workflow,
                     prompt=settings["prompt"],
                     negative_prompt=settings["negative_prompt"],
                     checkpoint=settings["checkpoint"],
                     input_image=uploaded_name,
+                    mask_image=uploaded_mask_name,
                     seed=settings["seed"],
                     steps=settings["steps"],
                     cfg=settings["cfg"],
@@ -242,13 +271,20 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(output)
                 output_paths.append(output_path)
-            metadata = {**settings, "prompt_id": result.prompt_id}
+            metadata = {**settings, "seed": result.seed, "prompt_id": result.prompt_id}
             GLib.idle_add(self._finish_on_main_thread, output_paths, metadata)
         except Exception as error:
             GLib.idle_add(self._show_error, str(error))
+        finally:
+            for staged_path in (input_path, mask_path):
+                if staged_path is not None:
+                    staged_path.unlink(missing_ok=True)
 
     def _finish_on_main_thread(self, output_paths: list[Path], metadata: dict) -> bool:
         try:
+            if self.cancel_requested:
+                self.status.set_text("Cancelled")
+                return False
             if self.image is not None and self.image.is_valid():
                 for output_index, output_path in enumerate(output_paths):
                     layer = self.image_operations.insert_layer(
@@ -268,6 +304,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             self.completed = True
         except Exception as error:
             self._show_error(str(error))
+        finally:
+            for output_path in output_paths:
+                output_path.unlink(missing_ok=True)
         self.generate_button.set_sensitive(True)
         return False
 
@@ -279,7 +318,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _on_cancel(self, _button: Gtk.Button) -> None:
         self.completed = False
-        client = self.active_client
-        if client is not None and self.worker and self.worker.is_alive():
-            threading.Thread(target=client.interrupt, daemon=True).start()
+        self.cancel_requested = True
+        coordinator = self.active_coordinator
+        if coordinator is not None and self.worker and self.worker.is_alive():
+            threading.Thread(target=coordinator.cancel, daemon=True).start()
         self.response(Gtk.ResponseType.CANCEL)

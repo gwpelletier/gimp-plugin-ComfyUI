@@ -16,6 +16,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -23,6 +24,10 @@ from urllib.request import Request, urlopen
 
 class ComfyUIError(RuntimeError):
     """Raised when ComfyUI cannot accept or complete a request."""
+
+
+class ComfyUICancelledError(ComfyUIError):
+    """Raised when a queued ComfyUI prompt is cancelled by the caller."""
 
 
 @dataclass(frozen=True)
@@ -86,13 +91,13 @@ class ComfyUIClient:
         """
         return self._json_request("GET", "/system_stats")
 
-    def interrupt(self) -> None:
+    def interrupt(self) -> dict:
         """Interrupt the currently executing ComfyUI prompt.
 
         Raises:
             ComfyUIError: If ComfyUI rejects or cannot receive the request.
         """
-        self._json_request("POST", "/interrupt", b"{}", "application/json")
+        return self._json_request("POST", "/interrupt", b"{}", "application/json")
 
     def clear_queue(self) -> None:
         """Clear prompts waiting in the ComfyUI queue.
@@ -206,7 +211,14 @@ class ComfyUIClient:
             folder_type=str(response.get("type", "input")),
         )
 
-    def wait_for_outputs(self, prompt_id: str, *, poll_interval: float = 0.5, timeout: float = 3600.0) -> list[ComfyImage]:
+    def wait_for_outputs(
+        self,
+        prompt_id: str,
+        *,
+        poll_interval: float = 0.5,
+        timeout: float = 3600.0,
+        cancellation_event: Event | None = None,
+    ) -> list[ComfyImage]:
         """Wait for a prompt to finish and return image output references.
 
         Raises:
@@ -214,6 +226,8 @@ class ComfyUIClient:
         """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            if cancellation_event is not None and cancellation_event.is_set():
+                raise ComfyUICancelledError(f"ComfyUI prompt {prompt_id} was cancelled")
             history = json.loads(self._request("GET", f"/history/{prompt_id}"))
             prompt = history.get(prompt_id)
             if prompt and prompt.get("status", {}).get("status_str") == "error":
@@ -225,6 +239,8 @@ class ComfyUIClient:
                     for item in output.get("images", [])
                 ]
             time.sleep(poll_interval)
+        if cancellation_event is not None and cancellation_event.is_set():
+            raise ComfyUICancelledError(f"ComfyUI prompt {prompt_id} was cancelled")
         raise ComfyUIError(f"Timed out waiting for ComfyUI workflow {prompt_id}")
 
     def view_image(self, image: ComfyImage) -> bytes:

@@ -97,6 +97,7 @@ def apply_generation_parameters(
     workflow: dict[str, Any],
     *,
     input_image: str | None = None,
+    mask_image: str | None = None,
     positive_prompt: str | None = None,
     negative_prompt: str | None = None,
     checkpoint: str | None = None,
@@ -115,6 +116,7 @@ def apply_generation_parameters(
     Args:
         workflow: API-format workflow node map.
         input_image: ComfyUI input filename, including subfolder when needed.
+        mask_image: ComfyUI mask filename when the workflow has a mask input.
         positive_prompt: Text for the positive conditioning node.
         negative_prompt: Text for the negative conditioning node.
         checkpoint: ComfyUI checkpoint name, including nested model path.
@@ -164,7 +166,39 @@ def apply_generation_parameters(
     _apply_linked_prompts(result, positive_prompt, negative_prompt)
     if loras:
         apply_loras(result, loras)
+    if mask_image is not None:
+        result = apply_mask(result, mask_image)
     validate_resolved_workflow(result)
+    return result
+
+
+def apply_mask(workflow: dict[str, Any], mask_image: str) -> dict[str, Any]:
+    """Inject a ``LoadImageMask`` node into every compatible mask input.
+
+    Args:
+        workflow: API-format workflow node map.
+        mask_image: ComfyUI input filename for the mask image.
+
+    Raises:
+        WorkflowError: If the workflow has no input named ``mask``.
+    """
+    result = copy.deepcopy(workflow)
+    target_nodes = [node for node in result.values() if "mask" in node["inputs"]]
+    if not target_nodes:
+        raise WorkflowError("Cannot apply a mask: workflow has no compatible mask input")
+
+    numeric_ids = [int(node_id) for node_id in result if str(node_id).isdigit()]
+    node_id = str(max(numeric_ids, default=0) + 1)
+    result[node_id] = {
+        "class_type": "LoadImageMask",
+        "inputs": {
+            "image": mask_image,
+            "channel": "green",
+            "upload": "image",
+        },
+    }
+    for node in target_nodes:
+        node["inputs"]["mask"] = [node_id, 0]
     return result
 
 

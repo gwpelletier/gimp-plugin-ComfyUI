@@ -4,6 +4,7 @@ from comfyui_plugin.workflow import (
     WorkflowError,
     apply_generation_parameters,
     apply_loras,
+    apply_mask,
     apply_parameters,
     load_workflow,
 )
@@ -136,3 +137,46 @@ class TestApplyLoras:
 
         # Assert
         assert list(workflow) == ["1"]
+
+
+class TestApplyMask:
+    def test_injects_mask_loader_into_all_mask_consumers(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "LoadImage", "inputs": {"image": "input.png"}},
+            "2": {"class_type": "VAEEncodeForInpaint", "inputs": {"mask": "old-mask"}},
+            "3": {"class_type": "SetLatentNoiseMask", "inputs": {"mask": "old-mask"}},
+        }
+
+        # Act
+        updated = apply_mask(workflow, "uploads/mask.png")
+
+        # Assert
+        assert updated["4"] == {
+            "class_type": "LoadImageMask",
+            "inputs": {"image": "uploads/mask.png", "channel": "green", "upload": "image"},
+        }
+        assert updated["2"]["inputs"]["mask"] == ["4", 0]
+        assert updated["3"]["inputs"]["mask"] == ["4", 0]
+
+    def test_rejects_workflow_without_mask_consumers(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {"model": ["2", 0]}}}
+
+        # Act
+        with pytest.raises(WorkflowError, match="no compatible mask input"):
+            apply_mask(workflow, "mask.png")
+
+        # Assert
+        assert workflow["1"]["inputs"] == {"model": ["2", 0]}
+
+    def test_does_not_mutate_template(self):
+        # Arrange
+        workflow = {"1": {"class_type": "VAEEncodeForInpaint", "inputs": {"mask": "old-mask"}}}
+
+        # Act
+        updated = apply_mask(workflow, "mask.png")
+
+        # Assert
+        assert workflow["1"]["inputs"]["mask"] == "old-mask"
+        assert updated["1"]["inputs"]["mask"] == ["2", 0]

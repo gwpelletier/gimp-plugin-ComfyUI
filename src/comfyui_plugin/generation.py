@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import random
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .client import ComfyImage, ComfyUIClient
+from .client import ComfyImage, ComfyUICancelledError, ComfyUIClient
 from .workflow import apply_generation_parameters
 
 
@@ -50,6 +51,7 @@ class GenerationRequest:
     negative_prompt: str
     checkpoint: str | None = None
     input_image: str | None = None
+    mask_image: str | None = None
     seed: int = -1
     width: int | None = None
     height: int | None = None
@@ -63,10 +65,15 @@ class GenerationRequest:
 
 @dataclass(frozen=True)
 class GenerationResult:
-    """Prompt identifier and image outputs returned by ComfyUI."""
+    """Prompt identifier, resolved seed, and image outputs returned by ComfyUI."""
 
     prompt_id: str
+    seed: int
     images: list[ComfyImage]
+
+
+class GenerationCancelledError(RuntimeError):
+    """Raised when generation is cancelled before outputs are available."""
 
 
 class GenerationCoordinator:
@@ -75,18 +82,55 @@ class GenerationCoordinator:
     def __init__(self, client: ComfyUIClient):
         """Create a coordinator using an already configured ComfyUI client."""
         self.client = client
+        self._active_prompt_ids: set[str] = set()
+        self._cancellation_events: set[threading.Event] = set()
+        self._state_lock = threading.Lock()
+
+    @property
+    def active_prompt_ids(self) -> tuple[str, ...]:
+        """Return prompt IDs currently being polled by this coordinator."""
+        with self._state_lock:
+            return tuple(sorted(self._active_prompt_ids))
+
+    def cancel(self) -> None:
+        """Request cancellation of active work and interrupt ComfyUI."""
+        with self._state_lock:
+            events = tuple(self._cancellation_events)
+        for event in events:
+            event.set()
+        if events:
+            self.client.interrupt()
 
     def run(
         self,
         request: GenerationRequest,
         *,
         on_progress: Callable[[int, int], None] | None = None,
+        cancellation_event: threading.Event | None = None,
     ) -> GenerationResult:
         """Prepare, queue, wait for, and return one generation result."""
+        cancellation_event = cancellation_event or threading.Event()
+        with self._state_lock:
+            self._cancellation_events.add(cancellation_event)
+        try:
+            return self._run(request, on_progress, cancellation_event)
+        finally:
+            with self._state_lock:
+                self._cancellation_events.discard(cancellation_event)
+
+    def _run(
+        self,
+        request: GenerationRequest,
+        on_progress: Callable[[int, int], None] | None,
+        cancellation_event: threading.Event,
+    ) -> GenerationResult:
+        if cancellation_event.is_set():
+            raise GenerationCancelledError("Generation was cancelled before queueing")
         seed = request.seed if request.seed > 0 else random.randint(1, 2**32)
         workflow = apply_generation_parameters(
             request.workflow,
             input_image=request.input_image,
+            mask_image=request.mask_image,
             positive_prompt=request.prompt,
             negative_prompt=request.negative_prompt,
             checkpoint=request.checkpoint,
@@ -101,7 +145,17 @@ class GenerationCoordinator:
             loras=request.loras,
         )
         prompt_id = self.client.queue_prompt(workflow)
-        images = self.client.wait_for_outputs(prompt_id)
+        with self._state_lock:
+            self._active_prompt_ids.add(prompt_id)
+        try:
+            images = self.client.wait_for_outputs(prompt_id, cancellation_event=cancellation_event)
+        except ComfyUICancelledError as error:
+            raise GenerationCancelledError(str(error)) from error
+        finally:
+            with self._state_lock:
+                self._active_prompt_ids.discard(prompt_id)
+        if cancellation_event.is_set():
+            raise GenerationCancelledError(f"Generation {prompt_id} was cancelled")
         if on_progress:
             on_progress(1, 1)
-        return GenerationResult(prompt_id, images)
+        return GenerationResult(prompt_id, seed, images)

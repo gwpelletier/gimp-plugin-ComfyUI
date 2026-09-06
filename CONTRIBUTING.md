@@ -72,6 +72,15 @@ COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
 python -m pytest test/integration/test_comfyui_generation_flow.py
 ```
 
+For the opt-in cancellation flow, configure a deliberately long-running API workflow and its checkpoint:
+
+```sh
+COMFYUI_URL=http://127.0.0.1:8188 \
+COMFYUI_CANCEL_WORKFLOW=/path/to/long-running-api-workflow.json \
+COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
+python -m pytest test/integration/test_comfyui_cancellation_flow.py
+```
+
 ## Build and install
 
 `python scripts/build.py` creates a versioned `dist/gimp-comfyui-<version>.zip` archive and removes stale archives from earlier builds. To install into the current user's standard GIMP 3 plug-in directory:

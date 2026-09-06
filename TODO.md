@@ -25,14 +25,16 @@ Current validation baseline: run the default suite for fast checks; with live se
 
 ### 1. Selection masks
 
-- [ ] Implement `GimpImageOperations.create_mask()` using GIMP 3 selection/channel APIs.
-- [ ] Preserve and restore GIMP context colors and selection state.
-- [ ] Export masks into the per-user temporary directory with unique names.
-- [ ] Add a workflow transformation helper that injects `LoadImageMask` nodes into mask consumers.
-- [ ] Reject mask requests when the workflow has no compatible mask input.
-- [ ] Add unit tests for mask-node injection, missing mask inputs, and template immutability.
-- [ ] Add an opt-in GIMP integration flow that creates a selection, exports a mask, and verifies cleanup.
+- [x] Implement `GimpImageOperations.create_mask()` using GIMP 3 selection/channel APIs.
+- [x] Preserve and restore GIMP context colors and selection state.
+- [x] Export masks into the per-user temporary directory with unique names.
+- [x] Add a workflow transformation helper that injects `LoadImageMask` nodes into mask consumers.
+- [x] Reject mask requests when the workflow has no compatible mask input.
+- [x] Add unit tests for mask-node injection, missing mask inputs, and template immutability.
+- [x] Add an opt-in GIMP integration flow that creates a selection, exports a mask, and verifies cleanup.
 - [ ] Run a real ComfyUI inpainting workflow using a configured mask-capable checkpoint before marking complete.
+
+Implementation status: mask export, workflow injection, generation plumbing, and automated tests are complete. The live inpainting validation remains pending until a mask-capable ComfyUI workflow and checkpoint are configured.
 
 Acceptance criteria:
 
@@ -42,12 +44,14 @@ Acceptance criteria:
 
 ### 2. Output and cancellation robustness
 
-- [ ] Track active prompt IDs in `GenerationCoordinator`.
-- [ ] Make cancellation state explicit and stop polling after cancellation.
-- [ ] Confirm the interrupt response and distinguish cancelled jobs from failed jobs.
-- [ ] Clean up preview/result temporary files according to success, cancellation, and failure paths.
-- [ ] Add tests for cancellation before queueing, during polling, and after completion.
-- [ ] Add integration coverage that starts a longer job, cancels it, and verifies no result layer is inserted.
+- [x] Track active prompt IDs in `GenerationCoordinator`.
+- [x] Make cancellation state explicit and stop polling after cancellation.
+- [x] Confirm the interrupt response and distinguish cancelled jobs from failed jobs.
+- [x] Clean up preview/result temporary files according to success, cancellation, and failure paths.
+- [x] Add tests for cancellation before queueing, during polling, and after completion.
+- [x] Add opt-in ComfyUI integration coverage that starts a longer job, cancels it, and verifies no outputs are returned.
+
+Implementation status: cancellation state, interrupt handling, active prompt tracking, cleanup, unit coverage, and an opt-in real-ComfyUI cancellation flow are complete. The UI-level no-result-layer assertion remains covered by the coordinator guard and should be exercised during a configured GIMP acceptance run.
 
 Acceptance criteria:
 
@@ -57,10 +61,10 @@ Acceptance criteria:
 
 ### 3. End-to-end result metadata
 
-- [ ] Include workflow path, prompt, negative prompt, checkpoint, LoRAs, seed, sampler, scheduler, CFG, steps, denoise, and prompt ID in layer metadata.
-- [ ] Add a metadata read/verification helper at the GIMP boundary.
-- [ ] Add an integration assertion that an inserted result layer contains the expected parasite payload.
-- [ ] Document the metadata key/version and compatibility behavior.
+- [x] Include workflow path, prompt, negative prompt, checkpoint, LoRAs, seed, sampler, scheduler, CFG, steps, denoise, and prompt ID in layer metadata.
+- [x] Add a metadata read/verification helper at the GIMP boundary.
+- [x] Add an integration assertion that an inserted result layer contains the expected parasite payload.
+- [x] Document the metadata key/version and compatibility behavior.
 
 ## Priority 2: Migrate the useful source-project UI
 

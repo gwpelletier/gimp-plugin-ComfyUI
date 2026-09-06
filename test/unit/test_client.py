@@ -38,6 +38,16 @@ class TestComfyUIClient:
         assert prompt_id == "job-1"
         assert outputs[0].filename == "result.png"
 
+    def test_interrupt_returns_comfyui_response(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+
+        # Act
+        response = client.interrupt()
+
+        # Assert
+        assert response == {"prompt_id": "job-1"}
+
     def test_wait_for_outputs_returns_all_image_references(self, comfyui_server, monkeypatch):
         # Arrange
         client = ComfyUIClient(comfyui_server.url)
