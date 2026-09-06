@@ -10,14 +10,20 @@ import sys
 
 
 def default_plugin_dir() -> Path:
+    config_version = os.environ.get("GIMP_VERSION", "3.2")
+    configured_root = os.environ.get("GIMP_CONFIG_DIR")
     system = platform.system()
     if system == "Windows":
         app_data = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-        return app_data / "GIMP" / "3.0" / "plug-ins"
+        root = Path(configured_root) if configured_root else app_data / "GIMP" / config_version
+        return root / "plug-ins"
     if system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "GIMP" / "3.0" / "plug-ins"
+        root = Path(configured_root) if configured_root else Path.home() / "Library" / "Application Support" / "GIMP" / config_version
+        return root / "plug-ins"
+    if configured_root:
+        return Path(configured_root) / "plug-ins"
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return config_home / "GIMP" / "3.0" / "plug-ins"
+    return config_home / "GIMP" / config_version / "plug-ins"
 
 
 def main() -> None:

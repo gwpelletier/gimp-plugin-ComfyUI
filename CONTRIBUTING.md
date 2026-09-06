@@ -4,6 +4,8 @@
 
 Read [`AGENTS.md`](AGENTS.md) first. It defines the repository-wide contract and links to the applicable scoped Copilot instructions. Use [`docs/instruction-precedence.md`](docs/instruction-precedence.md) when guidance appears to conflict.
 
+This project is GPL-3.0-only. Read [`docs/migration-notice.md`](docs/migration-notice.md) before copying or adapting code from the source project.
+
 The `.github/instructions/` files are the authoritative authoring rules for matching paths:
 
 - Runtime Python: [source instructions](.github/instructions/source.instructions.md)
@@ -60,6 +62,16 @@ python -m pytest -m integration
 
 Integration prerequisites are skipped with an actionable message when their environment variables are absent.
 
+For the opt-in real generation flow, also set `COMFYUI_TEST_IMAGE` and `COMFYUI_CHECKPOINT`:
+
+```sh
+GIMP_BIN=/usr/bin/gimp \
+COMFYUI_URL=http://127.0.0.1:8188 \
+COMFYUI_TEST_IMAGE="$HOME/.config/GIMP/3.2/comfy/temporary_images/main_input.png" \
+COMFYUI_CHECKPOINT=sdxl/sd_xl_base_1.0.safetensors \
+python -m pytest test/integration/test_comfyui_generation_flow.py
+```
+
 ## Build and install
 
 `python scripts/build.py` creates a versioned `dist/gimp-comfyui-<version>.zip` archive and removes stale archives from earlier builds. To install into the current user's standard GIMP 3 plug-in directory:
@@ -68,7 +80,7 @@ Integration prerequisites are skipped with an actionable message when their envi
 python scripts/install.py
 ```
 
-Set `GIMP_PLUGIN_DIR` to use a different destination. Close and restart GIMP after installation.
+Set `GIMP_PLUGIN_DIR` to use a different destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` when testing another GIMP 3 minor version. Close and restart GIMP after installation.
 
 The bundle follows GIMP 3's Python plug-in layout: the executable `gimp-comfyui.py` is inside the same-named `gimp-comfyui/` directory. The build includes only the executable, importable runtime package, workflow templates, and `LICENSE`; generated build directories and Python bytecode are excluded.
 

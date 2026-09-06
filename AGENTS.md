@@ -4,6 +4,8 @@
 
 This repository contains a GIMP 3.0 Python plug-in that submits image batches to ComfyUI and returns generated images to GIMP or an export directory.
 
+The repository is licensed under GPL-3.0-only. See [`docs/migration-notice.md`](docs/migration-notice.md) for source provenance and third-party dependency boundaries.
+
 ## Source layout
 
 - `src/`: installable plug-in source and runtime code.
@@ -25,6 +27,7 @@ The authoritative scoped guidance is maintained alongside the code:
 - Instruction precedence: [`docs/instruction-precedence.md`](docs/instruction-precedence.md).
 
 Contributor setup, validation, build, installation, and architecture context are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+The prioritized implementation roadmap is maintained in [`TODO.md`](TODO.md).
 
 Read the applicable scoped instruction before editing. The root [`.github/copilot-instructions.md`](.github/copilot-instructions.md) maps these areas. When repository guidance conflicts, follow [`docs/instruction-precedence.md`](docs/instruction-precedence.md).
 

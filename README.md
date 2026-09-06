@@ -2,6 +2,8 @@
 
 A GIMP 3.0 Python plug-in foundation for batch AI image editing through ComfyUI.
 
+Licensed under GPL-3.0-only. See [`docs/migration-notice.md`](docs/migration-notice.md) for migration provenance and dependency licensing boundaries.
+
 ## Current status
 
 The repository contains the installable plug-in boundary, ComfyUI queue/history client, workflow substitution, build/install scripts, and unit/integration test scaffolding. The dockable batch panel and image conversion pipeline are the next implementation slice.
@@ -11,6 +13,7 @@ The repository contains the installable plug-in boundary, ComfyUI queue/history 
 - `src/` - plug-in and runtime source.
 - `test/` - unit tests and opt-in integration tests.
 - `workflows/` - ComfyUI API-format templates.
+- `TODO.md` - prioritized migration roadmap and completion criteria.
 - `scripts/build.py` - creates a versioned installable plug-in archive in `dist/`.
 - `scripts/install.py` - builds and installs for the current user.
 - `CONTRIBUTING.md` - contributor workflow, validation, and build/install process.
@@ -37,10 +40,10 @@ Close GIMP, then run:
 python3 scripts/install.py
 ```
 
-The installer uses the standard per-user plug-in directory:
+The installer uses the standard per-user plug-in directory for the configured GIMP version (GIMP 3.2 by default):
 
-- Linux: `~/.config/GIMP/3.0/plug-ins/`
-- macOS: `~/Library/Application Support/GIMP/3.0/plug-ins/`
-- Windows: `%APPDATA%/GIMP/3.0/plug-ins/`
+- Linux: `~/.config/GIMP/<version>/plug-ins/`
+- macOS: `~/Library/Application Support/GIMP/<version>/plug-ins/`
+- Windows: `%APPDATA%/GIMP/<version>/plug-ins/`
 
-Set `GIMP_PLUGIN_DIR` to override the destination. Restart GIMP after installation. The plug-in is currently registered under `Filters > AI > ComfyUI Batch...`.
+Set `GIMP_PLUGIN_DIR` to override the destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` for automatic path construction. Restart GIMP after installation. The plug-in is currently registered under `Filters > AI > ComfyUI Batch...`.

@@ -5,6 +5,12 @@ from threading import Thread
 
 class FakeComfyUIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
+        if self.path == "/upload/image":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"name": "uploaded.png", "subfolder": "", "type": "input"}).encode())
+            return
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -19,6 +25,11 @@ class FakeComfyUIHandler(BaseHTTPRequestHandler):
     def _response_body(self):
         if self.path.startswith("/history"):
             return {"job-1": {"outputs": {"node": {"images": [{"filename": "result.png"}]}}}}
+        if self.path == "/object_info":
+            return {
+                "CheckpointLoaderSimple": {"input": {"required": {"ckpt_name": [["models/checkpoint.safetensors"]]}}},
+                "KSampler": {"input": {"required": {"sampler_name": [["euler"]], "scheduler": [["normal"]]}}},
+            }
         return {"system": "ok"}
 
     def log_message(self, *_):
