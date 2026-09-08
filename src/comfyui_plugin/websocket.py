@@ -134,9 +134,11 @@ class ComfyUIWebSocket:
 
     @staticmethod
     def _read_http_headers(connection: socket.socket) -> bytes:
+        # Read one byte at a time so the upgrade response never over-reads into
+        # the first WebSocket frame, which can share the same TCP segment.
         data = bytearray()
         while b"\r\n\r\n" not in data:
-            chunk = connection.recv(4096)
+            chunk = connection.recv(1)
             if not chunk:
                 break
             data.extend(chunk)

@@ -52,7 +52,33 @@ python -m pytest
 python scripts/build.py
 ```
 
-Unit tests use local fakes and do not require GIMP, GTK, a GPU, model files, or a network service. Integration tests are opt-in:
+Unit tests use local fakes and do not require GIMP, GTK, a GPU, model files, or a network service.
+
+Coverage is enforced on every `python -m pytest` run: the suite fails unless line and branch coverage of `src/` is 100%. The GIMP-bound modules (`src/gimp_comfyui.py`, `src/comfyui_plugin/gimp_image.py`, `src/comfyui_plugin/gimp_ui.py`) cannot run outside GIMP's embedded Python and are excluded from measurement; their behavior is covered by the opt-in integration flows below. When adding code to a measured module, add unit tests that keep the gate at 100%.
+
+### Mutation testing (opt-in)
+
+Coverage proves lines execute; mutation testing proves the tests actually pin the behavior. Use it after strengthening the unit suite.
+
+On Windows, run it in Docker (mutmut does not support native Windows; upstream issue [boxed/mutmut#397](https://github.com/boxed/mutmut/issues/397)):
+
+```sh
+python scripts/run_mutation.py            # mutmut run
+python scripts/run_mutation.py results    # list surviving mutants
+python scripts/run_mutation.py show 12    # inspect one mutant
+```
+
+The runner builds `scripts/mutation.Dockerfile`, mounts the repository so results persist, and forwards extra arguments to mutmut. On Linux or macOS you can instead run mutmut directly:
+
+```sh
+python -m pip install -e '.[mutation]'
+mutmut run
+mutmut results
+```
+
+`mutmut` mutates `src/comfyui_plugin/`, runs the unit suite against each mutant, and reports mutants that survived — each survivor is a place where a behavior change went unnoticed by every test, so strengthen the assertions there. The GIMP-bound modules are excluded (same reason as coverage), and mutation runs are never part of the default validation because they are much slower than the unit suite.
+
+Integration tests are opt-in:
 
 ```sh
 GIMP_BIN=/path/to/gimp \
