@@ -309,6 +309,13 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             for row in self.lora_rows.get_children()
         }
 
+    def _clear_loras(self) -> None:
+        """Remove selected LoRAs when the model family changes."""
+        for row in self.lora_rows.get_children():
+            self.lora_rows.remove(row)
+        self.lora_selector.get_child().set_text("")
+        self.lora_strength.set_value(1.0)
+
     def _settings_snapshot(self) -> dict:
         """Return dialog values that can be stored as history or a style."""
         return {
@@ -490,6 +497,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._apply_checkpoint_profile()
 
     def _on_checkpoint_profile_changed(self, _selector: Gtk.ComboBoxText) -> None:
+        self._clear_loras()
         self._refresh_workflow_selector()
         self._update_family_resource_guesses()
         self._apply_checkpoint_profile()

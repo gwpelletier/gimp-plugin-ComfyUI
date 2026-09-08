@@ -150,3 +150,14 @@ class TestGimpUiAvailabilitySource:
         # Assert
         assert connected
         assert visibility_check
+
+    def test_checkpoint_profile_change_clears_selected_loras(self):
+        # Act
+        calls = self._method_calls("_on_checkpoint_profile_changed")
+
+        # Assert
+        assert any(
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr == "_clear_loras"
+            for call in calls
+        )
