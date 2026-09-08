@@ -43,6 +43,10 @@ Read the applicable scoped instruction before editing. The root [`.github/copilo
 - Do not commit generated `build/`, `dist/`, or `*.egg-info/` files.
 - Add or update tests with behavior changes.
 
+## Commit messages
+
+Use Conventional Commits for commit subjects, such as `feat: add retry control` or `fix: handle unavailable ComfyUI`. Keep the subject at or below 100 characters.
+
 ## Validation
 
 Tests use one unit-test class per production subject, one integration-test module and class per end-to-end flow, test-only boundary adapters under `test/support/`, and explicit Arrange/Act/Assert sections for behavior tests. Unit tests must not invoke GIMP or a network service. Run `python -m pytest` for unit tests. Run `python scripts/build.py` to create the installable bundle. Integration tests require `GIMP_BIN` and `COMFYUI_URL` and are skipped otherwise; `python scripts/run_integration.py` discovers local defaults, probes ComfyUI, exports both variables, and runs the integration marker.
