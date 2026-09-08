@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/gwpelletier/gimp-plugin-ComfyUI/compare/gimp-plugin-comfyui-v0.2.0...gimp-plugin-comfyui-v0.2.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* align release archive version ([930ae5d](https://github.com/gwpelletier/gimp-plugin-ComfyUI/commit/930ae5d44aebf6ed66b724dfc59f6debf3e243d7))
+* mark runtime version for Release Please ([#13](https://github.com/gwpelletier/gimp-plugin-ComfyUI/issues/13)) ([fa53e7f](https://github.com/gwpelletier/gimp-plugin-ComfyUI/commit/fa53e7f70ed01494387236c73daa94b78df3d58d))
+
 ## [0.2.0](https://github.com/gwpelletier/gimp-plugin-ComfyUI/compare/gimp-plugin-comfyui-v0.1.0...gimp-plugin-comfyui-v0.2.0) (2026-09-08)
 
 
