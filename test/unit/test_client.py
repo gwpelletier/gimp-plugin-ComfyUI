@@ -3,11 +3,14 @@ import json
 import pytest
 
 from comfyui_plugin.client import (
+    ComfyImage,
+    ComfyUICancelledError,
     ComfyUIClient,
     ComfyUIError,
     ComfyUIEventType,
     parse_websocket_event,
 )
+from comfyui_plugin.workflow import WorkflowError
 
 
 class TestComfyUIClient:
@@ -221,3 +224,202 @@ class TestComfyUIClient:
         # Act
         with pytest.raises(ComfyUIError, match="failed workflow"):
             client.wait_for_outputs("job-1", poll_interval=0)
+
+    def test_parses_progress_event_from_bytes_payload(self):
+        # Arrange
+        payload = b'{"type": "progress", "data": {"value": 2, "max": 8}}'
+
+        # Act
+        event = parse_websocket_event(payload)
+
+        # Assert
+        assert event.event_type == ComfyUIEventType.PROGRESS
+        assert event.value == 2
+        assert event.maximum == 8
+
+    def test_parse_websocket_event_rejects_non_object_message(self):
+        # Act / Assert
+        with pytest.raises(ComfyUIError, match="must be a JSON object"):
+            parse_websocket_event("[1, 2, 3]")
+
+    def test_parse_websocket_event_normalizes_non_dict_data_to_empty(self):
+        # Arrange
+        payload = {"type": "status", "data": "unexpected"}
+
+        # Act
+        event = parse_websocket_event(payload)
+
+        # Assert
+        assert event.event_type == ComfyUIEventType.STATUS
+        assert event.data == {}
+        assert event.prompt_id is None
+        assert event.value is None
+
+    def test_open_websocket_targets_client_scoped_ws_endpoint(self):
+        # Arrange
+        client = ComfyUIClient("http://comfy.example:8188", client_id="abc")
+
+        # Act
+        transport = client.open_websocket()
+
+        # Assert
+        assert transport.url.startswith("ws://comfy.example:8188/ws?")
+        assert "clientId=abc" in transport.url
+        assert transport.timeout == client.timeout
+
+    def test_open_websocket_uses_secure_scheme_and_timeout_override(self):
+        # Arrange
+        client = ComfyUIClient("https://comfy.example", client_id="abc")
+
+        # Act
+        transport = client.open_websocket(timeout=5.0)
+
+        # Assert
+        assert transport.url.startswith("wss://comfy.example/ws?")
+        assert transport.timeout == 5.0
+
+    def test_clear_queue_posts_clear_request_to_queue_endpoint(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        calls = []
+
+        def record(method, path, body=None, content_type=None):
+            calls.append((method, path, body, content_type))
+            return {}
+
+        monkeypatch.setattr(client, "_json_request", record)
+
+        # Act
+        client.clear_queue()
+
+        # Assert
+        assert calls == [("POST", "/queue", json.dumps({"clear": True}).encode(), "application/json")]
+
+    def test_reads_available_loras_vaes_and_unets(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+
+        # Act
+        loras = client.get_available_loras()
+        vaes = client.get_available_vaes()
+        unets = client.get_available_unets()
+
+        # Assert
+        assert loras == ["models/lora.safetensors"]
+        assert vaes == ["models/vae.safetensors"]
+        assert unets == ["models/unet.safetensors"]
+
+    def test_reads_available_schedulers(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+
+        # Act
+        schedulers = client.get_available_schedulers()
+
+        # Assert
+        assert schedulers == ["normal"]
+
+    def test_available_krea_models_is_empty_when_node_is_absent(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(client, "get_object_info", lambda: {"CheckpointLoaderSimple": {}})
+
+        # Act
+        models = client.get_available_krea_models()
+
+        # Assert
+        assert models == []
+
+    def test_validate_workflow_accepts_schema_compatible_workflow(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+        workflow = {"1": {"class_type": "KSampler", "inputs": {"sampler_name": "euler", "scheduler": "normal"}}}
+
+        # Act
+        result = client.validate_workflow(workflow)
+
+        # Assert
+        assert result is None
+
+    def test_validate_workflow_rejects_unavailable_node(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+        workflow = {"1": {"class_type": "GhostNode", "inputs": {}}}
+
+        # Act / Assert
+        with pytest.raises(WorkflowError, match="unavailable node GhostNode"):
+            client.validate_workflow(workflow)
+
+    def test_wait_for_outputs_cancels_before_first_poll(self, comfyui_server):
+        # Arrange
+        client = ComfyUIClient(comfyui_server.url)
+
+        class _AlreadySet:
+            def is_set(self):
+                return True
+
+        # Act / Assert
+        with pytest.raises(ComfyUICancelledError, match="job-1 was cancelled"):
+            client.wait_for_outputs("job-1", poll_interval=0, cancellation_event=_AlreadySet())
+
+    def test_wait_for_outputs_times_out_when_prompt_never_finishes(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(client, "_request", lambda *args: b"{}")
+        clock = iter([0.0, 0.0, 100.0])
+        monkeypatch.setattr("comfyui_plugin.client.time.monotonic", lambda: next(clock))
+        monkeypatch.setattr("comfyui_plugin.client.time.sleep", lambda _seconds: None)
+
+        # Act / Assert
+        with pytest.raises(ComfyUIError, match="Timed out waiting for ComfyUI workflow job-1"):
+            client.wait_for_outputs("job-1", poll_interval=0, timeout=1.0)
+
+    def test_wait_for_outputs_reports_cancellation_after_loop_exit(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(client, "_request", lambda *args: b"{}")
+        clock = iter([0.0, 0.0, 100.0])
+        monkeypatch.setattr("comfyui_plugin.client.time.monotonic", lambda: next(clock))
+        monkeypatch.setattr("comfyui_plugin.client.time.sleep", lambda _seconds: None)
+
+        class _SetsAfterLoop:
+            def __init__(self):
+                self.checks = 0
+
+            def is_set(self):
+                self.checks += 1
+                return self.checks > 1
+
+        # Act / Assert
+        with pytest.raises(ComfyUICancelledError, match="job-1 was cancelled"):
+            client.wait_for_outputs("job-1", poll_interval=0, timeout=1.0, cancellation_event=_SetsAfterLoop())
+
+    def test_view_image_downloads_bytes_for_image_query(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        requested = {}
+
+        def record(method, path):
+            requested["method"] = method
+            requested["path"] = path
+            return b"PNGDATA"
+
+        monkeypatch.setattr(client, "_request", record)
+        image = ComfyImage("result.png", "batch", "output")
+
+        # Act
+        data = client.view_image(image)
+
+        # Assert
+        assert data == b"PNGDATA"
+        assert requested["method"] == "GET"
+        assert requested["path"] == "/view?filename=result.png&subfolder=batch&type=output"
+
+    def test_json_request_rejects_invalid_json_body(self, monkeypatch):
+        # Arrange
+        client = ComfyUIClient("http://127.0.0.1:8188")
+        monkeypatch.setattr(client, "_request", lambda *args: b"not-json")
+
+        # Act / Assert
+        with pytest.raises(ComfyUIError, match="invalid JSON for GET /system_stats"):
+            client.get_system_stats()

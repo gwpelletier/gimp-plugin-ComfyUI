@@ -10,7 +10,8 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "pytest-cov>=5"]
+mutation = ["mutmut>=3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -21,7 +22,54 @@ version = {attr = "comfyui_plugin.__version__"}
 [tool.pytest.ini_options]
 testpaths = ["test"]
 pythonpath = ["src"]
-addopts = "-ra"
+addopts = "-ra --cov --cov-report=term-missing --cov-fail-under=100"
 markers = [
     "integration: requires installed GIMP and a running ComfyUI server",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+# GIMP-bound modules require the GIMP 3 runtime and are covered by opt-in
+# integration flows instead of the offline unit suite.
+omit = [
+    "src/gimp_comfyui.py",
+    "src/comfyui_plugin/gimp_image.py",
+    "src/comfyui_plugin/gimp_ui.py",
+]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+# Mutation testing is opt-in (python scripts/run_mutation.py), never part of
+# the default gate; a full run is much slower than the unit suite.
+[tool.mutmut]
+source_paths = ["src/comfyui_plugin/"]
+pytest_add_cli_args_test_selection = ["test/unit/"]
+# The build-manifest and install-path tests exercise scripts/, which mutmut
+# never mutates and does not copy into its sandbox, so they cannot produce
+# mutation signal and fail in the sandbox for path reasons only.
+pytest_add_cli_args = [
+    "-x",
+    "-q",
+    "--no-cov",
+    "--ignore=test/unit/test_build_manifest.py",
+    "--ignore=test/unit/test_install_paths.py",
+]
+# Workflow behavior tests read the bundled API workflow templates relative
+# to the working directory, so the sandbox needs real copies.
+also_copy = ["workflows/"]
+# The container mounts a host-owned .git; full runs are cheap enough here.
+use_git_change_detection = false
+# Mirror the coverage omissions: GIMP-bound modules cannot import offline,
+# so mutating them can only produce false survivors.
+do_not_mutate = [
+    "src/comfyui_plugin/gimp_image.py",
+    "src/comfyui_plugin/gimp_ui.py",
 ]

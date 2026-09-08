@@ -37,4 +37,7 @@ class TestBuildManifest:
             assert "gimp-comfyui/workflows/flux-inpainting-api.json" in names
             assert "gimp-comfyui/workflows/krea2-turbo-text-to-image-api.json" in names
             assert "gimp-comfyui/LICENSE" in names
+            assert "install.py" in names
+            assert "install.sh" in names
+            assert "install.ps1" in names
             assert not any(name.endswith((".pyc", ".pyo")) or "__pycache__" in name for name in names)

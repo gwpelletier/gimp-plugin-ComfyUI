@@ -1,0 +1,11 @@
+.git
+.venv
+.vscode
+build
+dist
+*.egg-info
+__pycache__
+.pytest_cache
+.coverage
+mutants
+.mutmut-cache
