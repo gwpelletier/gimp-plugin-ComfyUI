@@ -620,6 +620,43 @@ class TestApplyGenerationParameters:
 
 
 class TestApplyLoras:
+    def test_inserts_lora_chain_for_separate_model_and_clip_loaders(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "model.safetensors"}},
+            "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "clip.safetensors", "type": "krea2"}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0]}},
+            "4": {"class_type": "KSampler", "inputs": {"model": ["1", 0]}},
+        }
+
+        # Act
+        apply_loras(workflow, {"style.safetensors": 0.75})
+
+        # Assert
+        assert workflow["5"] == {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "lora_name": "style.safetensors",
+                "strength_model": 0.75,
+                "strength_clip": 0.75,
+                "model": ["1", 0],
+                "clip": ["2", 0],
+            },
+        }
+        assert workflow["3"]["inputs"]["clip"] == ["5", 1]
+        assert workflow["4"]["inputs"]["model"] == ["5", 0]
+
+    def test_rejects_split_model_loader_without_clip_loader(self):
+        # Arrange
+        workflow = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "model.safetensors"}}}
+
+        # Act
+        with pytest.raises(WorkflowError, match="^Cannot apply LoRAs without a CLIP loader$"):
+            apply_loras(workflow, {"style.safetensors": 0.75})
+
+        # Assert
+        assert list(workflow) == ["1"]
+
     def test_inserts_multiple_loras_after_checkpoint_loader_and_rewires_final_outputs(self):
         # Arrange
         workflow = {
@@ -793,3 +830,22 @@ class TestApplyMask:
             "class_type": "LoadImageMask",
             "inputs": {"image": "uploads/mask.png", "channel": "green", "upload": "image"},
         }
+
+
+class TestTextToImageWorkflows:
+    @pytest.mark.parametrize("workflow_path", [
+        "workflows/sdxl-text-to-image-api.json",
+        "workflows/sd15-text-to-image-api.json",
+        "workflows/flux-text-to-image-api.json",
+        "workflows/krea2-turbo-text-to-image-api.json",
+    ])
+    def test_text_to_image_workflow_does_not_require_an_uploaded_image(self, workflow_path):
+        # Arrange
+        workflow = load_workflow(workflow_path)
+
+        # Act
+        classes = {node["class_type"] for node in workflow.values()}
+
+        # Assert
+        assert "LoadImage" not in classes
+        assert "EmptyLatentImage" in classes or "EmptySD3LatentImage" in classes

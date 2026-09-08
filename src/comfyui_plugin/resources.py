@@ -27,6 +27,57 @@ def best_guess_option(options: list[str], hints: tuple[str, ...], current: str =
     return options[0] if len(options) == 1 else None
 
 
+_RESOURCE_MARKERS = {
+    "checkpoint",
+    "vae",
+    "unet",
+    "clip_l",
+    "clip_t5",
+    "diffusion_model",
+    "krea_clip",
+}
+
+
+def required_workflow_resources(workflow: dict[str, Any]) -> tuple[str, ...]:
+    """Return model resources required by workflow markers and loader nodes."""
+    required: list[str] = []
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for value in inputs.values():
+            if isinstance(value, str) and value.startswith("{{") and value.endswith("}}"):
+                marker = value[2:-2].strip()
+                if marker in _RESOURCE_MARKERS and marker not in required:
+                    required.append(marker)
+        class_type = node.get("class_type")
+        fallback = {
+            "CheckpointLoader": "checkpoint",
+            "CheckpointLoaderSimple": "checkpoint",
+            "VAELoader": "vae",
+            "DualCLIPLoader": "clip_l",
+        }.get(class_type)
+        if fallback and fallback not in required:
+            required.append(fallback)
+        if class_type == "DualCLIPLoader" and "clip_t5" not in required:
+            required.append("clip_t5")
+        if class_type == "UNETLoader" and "unet" not in required and "diffusion_model" not in required:
+            required.append("unet")
+        if class_type == "DiffusionModelLoader" and "diffusion_model" not in required:
+            required.append("diffusion_model")
+        if class_type == "CLIPLoader" and node.get("inputs", {}).get("type") == "krea2":
+            if "krea_clip" not in required:
+                required.append("krea_clip")
+    return tuple(required)
+
+
+def missing_workflow_resources(workflow: dict[str, Any], values: dict[str, str | None]) -> tuple[str, ...]:
+    """Return required workflow resources that have no selected value."""
+    return tuple(resource for resource in required_workflow_resources(workflow) if not values.get(resource))
+
+
 def workflow_supports_vae(workflow: dict[str, Any]) -> bool:
     """Return whether an API workflow exposes a selectable VAE input."""
     return any(
@@ -76,10 +127,10 @@ class CheckpointProfile:
 
 
 _PROFILES = {
-    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal", 0.75),
-    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal", 0.8),
-    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal", 0.65),
-    CheckpointType.KREA2_TURBO: CheckpointProfile(CheckpointType.KREA2_TURBO, "high", "workflow", 20, 1.0, "euler", "simple", 1.0),
+    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 16, 1.0, "euler", "simple", 0.75),
+    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "dpmpp_2m", "karras", 0.8),
+    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "dpmpp_2m", "karras", 0.65),
+    CheckpointType.KREA2_TURBO: CheckpointProfile(CheckpointType.KREA2_TURBO, "high", "workflow", 8, 1.0, "euler", "normal", 1.0),
     CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal", 1.0),
 }
 

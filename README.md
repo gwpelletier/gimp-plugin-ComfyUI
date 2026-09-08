@@ -45,6 +45,7 @@ Download `gimp-comfyui-<version>.zip` from the [releases page](../../releases), 
 - Linux/macOS (no Python required): `sh install.sh`
 - Any platform with Python 3 installed: `python3 install.py`
 
+
 ### From a repository clone
 
 Close GIMP, then run:
@@ -59,4 +60,6 @@ All installers use the standard per-user plug-in directory for the configured GI
 - macOS: `~/Library/Application Support/GIMP/<version>/plug-ins/`
 - Windows: `%APPDATA%/GIMP/<version>/plug-ins/`
 
-Set `GIMP_PLUGIN_DIR` to override the destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` for automatic path construction. Restart GIMP after installation. The plug-in is currently registered under `Filters > ComfyUI > Generate...`.
+Set `GIMP_PLUGIN_DIR` to override the destination, or set `GIMP_CONFIG_DIR` and `GIMP_VERSION` for automatic path construction. Restart GIMP after installation.
+
+Use `Filters > ComfyUI > Generate...` with an image, or `Tools > ComfyUI > Generate Image...` without one.

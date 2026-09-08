@@ -265,40 +265,62 @@ def apply_mask(workflow: dict[str, Any], mask_image: str) -> dict[str, Any]:
 
 
 def apply_loras(workflow: dict[str, Any], loras: dict[str, float]) -> None:
-    """Insert a LoRA loader chain and rewire checkpoint consumers in place.
+    """Insert a LoRA loader chain and rewire model and CLIP consumers in place.
 
     Args:
         workflow: Validated API-format workflow node map.
         loras: Mapping of ComfyUI LoRA names to model and CLIP strengths.
 
     Raises:
-        WorkflowError: If the workflow has no checkpoint loader or a LoRA name is empty.
+        WorkflowError: If the workflow has no model/CLIP loaders or a LoRA name is empty.
     """
-    checkpoint_id = next(
+    model_loader_id = next(
         (
             node_id
             for node_id, node in workflow.items()
-            if node["class_type"] in {"CheckpointLoader", "CheckpointLoaderSimple"}
+            if node["class_type"]
+            in {"CheckpointLoader", "CheckpointLoaderSimple", "UNETLoader", "DiffusionModelLoader"}
         ),
         None,
     )
-    if checkpoint_id is None:
+    if model_loader_id is None:
         raise WorkflowError("Cannot apply LoRAs without a checkpoint loader")
+    model_loader = workflow[model_loader_id]["class_type"]
+    clip_loader_id = (
+        model_loader_id
+        if model_loader in {"CheckpointLoader", "CheckpointLoaderSimple"}
+        else next(
+            (
+                node_id
+                for node_id, node in workflow.items()
+                if node["class_type"] in {"CLIPLoader", "DualCLIPLoader"}
+            ),
+            None,
+        )
+    )
+    if clip_loader_id is None:
+        raise WorkflowError("Cannot apply LoRAs without a CLIP loader")
     if any(not name for name in loras):
         raise WorkflowError("LoRA names must not be empty")
+    clip_output_index = 1 if clip_loader_id == model_loader_id else 0
 
     consumers = []
     for node_id, node in workflow.items():
-        if node_id == checkpoint_id:
+        if node_id in {model_loader_id, clip_loader_id}:
             continue
         for input_name, value in node["inputs"].items():
-            if isinstance(value, list) and len(value) == 2 and str(value[0]) == checkpoint_id:
-                consumers.append((node, input_name, value[1]))
+            if not isinstance(value, list) or len(value) != 2:
+                continue
+            source_id = str(value[0])
+            if source_id == model_loader_id and value[1] == 0:
+                consumers.append((node, input_name, 0))
+            elif source_id == clip_loader_id and value[1] == clip_output_index:
+                consumers.append((node, input_name, 1))
 
     numeric_ids = [int(node_id) for node_id in workflow if str(node_id).isdigit()]
     next_id = max(numeric_ids, default=0) + 1
-    current_model = [checkpoint_id, 0]
-    current_clip = [checkpoint_id, 1]
+    current_model = [model_loader_id, 0]
+    current_clip = [clip_loader_id, clip_output_index]
     for lora_name, strength in loras.items():
         node_id = str(next_id)
         workflow[node_id] = {

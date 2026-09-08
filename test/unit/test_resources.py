@@ -6,6 +6,8 @@ from comfyui_plugin.resources import (
     checkpoint_profile,
     filter_options,
     infer_checkpoint_type,
+    missing_workflow_resources,
+    required_workflow_resources,
     validate_checkpoint_workflow,
     workflow_supports_vae,
     workflow_matches_checkpoint_type,
@@ -92,6 +94,68 @@ class TestWorkflowSupportsInpainting:
         assert not supported
 
 
+class TestWorkflowResources:
+    def test_reads_required_resources_from_loader_markers(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "{{unet}}"}},
+            "2": {"class_type": "DualCLIPLoader", "inputs": {
+                "clip_name1": "{{clip_l}}", "clip_name2": "{{clip_t5}}",
+            }},
+            "3": {"class_type": "VAELoader", "inputs": {"vae_name": "{{vae}}", "backup": "{{vae}}"}},
+        }
+
+        # Act
+        required = required_workflow_resources(workflow)
+
+        # Assert
+        assert required == ("unet", "clip_l", "clip_t5", "vae")
+
+    def test_reports_missing_required_resource_values(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "{{checkpoint}}"}},
+            "2": {"class_type": "VAELoader", "inputs": {"vae_name": "{{vae}}"}},
+        }
+
+        # Act
+        missing = missing_workflow_resources(workflow, {"checkpoint": "base.safetensors", "vae": None})
+
+        # Assert
+        assert missing == ("vae",)
+
+    def test_reports_no_missing_resources_when_all_values_are_selected(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "{{checkpoint}}"}}}
+
+        # Act
+        missing = missing_workflow_resources(workflow, {"checkpoint": "base.safetensors"})
+
+        # Assert
+        assert missing == ()
+
+    def test_falls_back_to_loader_node_types_when_markers_are_absent(self):
+        # Arrange
+        workflow = {
+            "invalid": "not a node",
+            "invalid-inputs": {"class_type": "Note", "inputs": []},
+            "checkpoint": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": "vae"}},
+            "dual-clip": {"class_type": "DualCLIPLoader", "inputs": {}},
+            "unet": {"class_type": "UNETLoader", "inputs": {}},
+            "diffusion": {"class_type": "DiffusionModelLoader", "inputs": {}},
+            "krea-clip": {"class_type": "CLIPLoader", "inputs": {"type": "krea2"}},
+            "krea-clip-duplicate": {"class_type": "CLIPLoader", "inputs": {"type": "krea2"}},
+            "other-clip": {"class_type": "CLIPLoader", "inputs": {"type": "flux"}},
+        }
+
+        # Act
+        required = required_workflow_resources(workflow)
+
+        # Assert
+        assert required == ("checkpoint", "vae", "clip_l", "clip_t5", "unet", "diffusion_model", "krea_clip")
+
+
 class TestFamilySupportsMode:
     def test_rejects_krea2_turbo_for_inpainting(self):
         # Arrange
@@ -105,6 +169,32 @@ class TestFamilySupportsMode:
 
 
 class TestCheckpointProfiles:
+    @pytest.mark.parametrize(
+        ("checkpoint_type", "steps", "cfg", "sampler", "scheduler"),
+        [
+            (CheckpointType.FLUX, 16, 1.0, "euler", "simple"),
+            (CheckpointType.SDXL, 30, 7.0, "dpmpp_2m", "karras"),
+            (CheckpointType.SD15, 20, 7.5, "dpmpp_2m", "karras"),
+            (CheckpointType.KREA2_TURBO, 8, 1.0, "euler", "normal"),
+        ],
+    )
+    def test_family_profile_uses_requested_sampling_defaults(
+        self, checkpoint_type, steps, cfg, sampler, scheduler
+    ):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        profile = checkpoint_profile(workflow, override=checkpoint_type)
+
+        # Assert
+        assert (profile.steps, profile.cfg, profile.sampler, profile.scheduler) == (
+            steps,
+            cfg,
+            sampler,
+            scheduler,
+        )
+
     def test_infers_krea2_from_workflow_node(self):
         # Arrange
         workflow = {
