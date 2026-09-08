@@ -23,5 +23,5 @@ class TestComfyUICompatibilityFlow:
         stats = client.get_system_stats()
 
         # Assert
-        assert len(workflow_paths) == 7
+        assert len(workflow_paths) == 10
         assert stats["system"]["comfyui_version"]
