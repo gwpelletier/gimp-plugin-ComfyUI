@@ -35,6 +35,9 @@ class TestBuildManifest:
             assert "gimp-comfyui/workflows/sd15-inpainting-api.json" in names
             assert "gimp-comfyui/workflows/flux-image-edit-api.json" in names
             assert "gimp-comfyui/workflows/flux-inpainting-api.json" in names
+            assert "gimp-comfyui/workflows/sdxl-text-to-image-api.json" in names
+            assert "gimp-comfyui/workflows/sd15-text-to-image-api.json" in names
+            assert "gimp-comfyui/workflows/flux-text-to-image-api.json" in names
             assert "gimp-comfyui/workflows/krea2-turbo-text-to-image-api.json" in names
             assert "gimp-comfyui/LICENSE" in names
             assert "install.py" in names

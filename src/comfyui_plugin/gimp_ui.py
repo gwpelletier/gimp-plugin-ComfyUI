@@ -23,6 +23,8 @@ from .resources import (
     checkpoint_profile,
     family_supports_mode,
     infer_checkpoint_type,
+    missing_workflow_resources,
+    required_workflow_resources,
     validate_checkpoint_workflow,
     workflow_matches_checkpoint_type,
     workflow_supports_inpainting,
@@ -35,11 +37,23 @@ from .workflow import validate_api_workflow, load_workflow
 class ComfyUIGenerationDialog(GimpUi.Dialog):
     """Collect generation settings and resolve one request asynchronously."""
 
-    def __init__(self, image: Gimp.Image | None, *, eraser_mode: bool = False):
+    def __init__(
+        self,
+        image: Gimp.Image | None,
+        *,
+        eraser_mode: bool = False,
+        generation_mode: str | None = None,
+    ):
         """Create a dialog targeting ``image`` for result-layer insertion."""
-        super().__init__(title="ComfyUI AI Eraser" if eraser_mode else "ComfyUI Batch", flags=0)
+        super().__init__(
+            title="ComfyUI AI Eraser" if eraser_mode else "ComfyUI Generate Image" if image is None else "ComfyUI Batch",
+            flags=0,
+        )
         self.image = image
         self.eraser_mode = eraser_mode
+        self.generation_mode = generation_mode or (
+            "Inpainting" if eraser_mode else "Text to Image" if image is None else None
+        )
         self.image_operations = GimpImageOperations()
         self.plugin_paths = PluginPaths(Path(Gimp.directory()) / "comfyui")
         self.plugin_paths.ensure()
@@ -63,8 +77,17 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         content.pack_start(grid, True, True, 0)
 
         self.endpoint, self.retry_button = self._add_endpoint_row(grid, 0)
-        self.mode = self._add_combo(grid, 1, "Mode", ["Image Edit", "Inpainting"], "Image Edit")
+        selected_mode = self.generation_mode or "Image Edit"
+        self.mode = self._add_combo(
+            grid,
+            1,
+            "Mode",
+            ["Text to Image", "Image Edit", "Inpainting"],
+            selected_mode,
+        )
         self.mode.connect("changed", self._on_mode_changed)
+        if self.generation_mode is not None:
+            self._set_control_visibility(self.mode, False)
         self.checkpoint, self.checkpoint_type, self.checkpoint_label = self._add_checkpoint_controls(grid, 2)
         self.workflow_selector = self._add_workflow_selector(grid, 3)
         self._ensure_default_workflows()
@@ -91,7 +114,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             19,
             "Output",
             ["GIMP layers", "New image", "Export directory"],
-            "GIMP layers",
+            "New image" if self.image is None else "GIMP layers",
         )
         self.output_mode.connect("changed", self._on_output_mode_changed)
         self.output_directory = self._add_entry(grid, 20, "Export directory", "")
@@ -289,7 +312,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _settings_snapshot(self) -> dict:
         """Return dialog values that can be stored as history or a style."""
         return {
-            "mode": self.mode.get_active_text(),
+            "mode": self._selected_mode(),
             "prompt": self.prompt.get_text(),
             "negative_prompt": self.negative_prompt.get_text(),
             "checkpoint": self.checkpoint.get_child().get_text(),
@@ -312,8 +335,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     def _apply_settings(self, settings: dict) -> None:
         """Apply stored prompt and generation values to the dialog."""
         mode = settings.get("mode")
-        if mode in {"Image Edit", "Inpainting"}:
-            self.mode.set_active(["Image Edit", "Inpainting"].index(mode))
+        if mode in {"Text to Image", "Image Edit", "Inpainting"} and self.generation_mode is None:
+            self.mode.set_active(["Text to Image", "Image Edit", "Inpainting"].index(mode))
         self.prompt.set_text(str(settings.get("prompt", "")))
         self.negative_prompt.set_text(str(settings.get("negative_prompt", "")))
         self.checkpoint.get_child().set_text(str(settings.get("checkpoint", "")))
@@ -388,12 +411,15 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             workflow_directory / "sd15-inpainting-api.json",
             workflow_directory / "flux-image-edit-api.json",
             workflow_directory / "flux-inpainting-api.json",
+            workflow_directory / "sdxl-text-to-image-api.json",
+            workflow_directory / "sd15-text-to-image-api.json",
+            workflow_directory / "flux-text-to-image-api.json",
             workflow_directory / "krea2-turbo-text-to-image-api.json",
         ])
 
     def _configure_eraser_defaults(self) -> None:
         """Select the bundled inpainting workflow and eraser prompt."""
-        self.mode.set_active(1)
+        self.mode.set_active(2)
         self._refresh_workflow_selector()
         workflows = self.workflow_registry.list()
         inpainting = next(
@@ -409,12 +435,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _refresh_workflow_selector(self) -> None:
         self.workflow_selector.remove_all()
-        mode = self.mode.get_active_text() if hasattr(self, "mode") else "Image Edit"
+        mode = self._selected_mode()
         family = self._selected_checkpoint_type()
         workflows = [
             workflow for workflow in self.workflow_registry.list()
             if Path(workflow["path"]).is_file()
-            if ("inpainting" in Path(workflow["path"]).stem.casefold()) == (mode == "Inpainting")
+            if self._workflow_matches_mode(workflow["path"], mode)
             if self._workflow_matches_family(workflow["path"], family)
             if mode != "Inpainting" or self._workflow_supports_selected_inpainting(workflow["path"], family)
         ]
@@ -434,6 +460,13 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             self.checkpoint_type.set_active(profile_values.index(CheckpointType.AUTO.value))
         self._refresh_workflow_selector()
         self._apply_checkpoint_profile()
+
+    def _selected_mode(self) -> str:
+        if self.generation_mode is not None:
+            return self.generation_mode
+        if not hasattr(self, "mode"):
+            return "Image Edit"
+        return self.mode.get_active_text() or "Image Edit"
 
     def _on_output_mode_changed(self, selector: Gtk.ComboBoxText) -> None:
         """Show the export directory only when directory output is selected."""
@@ -484,6 +517,24 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             return workflow_supports_inpainting(load_workflow(workflow_path))
         except (OSError, ValueError):
             return False
+
+    @staticmethod
+    def _workflow_matches_mode(workflow_path: str, mode: str) -> bool:
+        try:
+            workflow = load_workflow(workflow_path)
+        except (OSError, ValueError):
+            return False
+        has_input_image = any(
+            node.get("class_type") == "LoadImage"
+            for node in workflow.values()
+            if isinstance(node, dict)
+        )
+        has_mask = workflow_supports_inpainting(workflow)
+        if mode == "Text to Image":
+            return not has_input_image and not has_mask
+        if mode == "Inpainting":
+            return has_mask
+        return has_input_image and not has_mask
 
     def _apply_checkpoint_profile(self) -> None:
         if not hasattr(self, "steps"):
@@ -636,14 +687,21 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             except (OSError, ValueError):
                 return
         if family == CheckpointType.FLUX:
+            self._select_best_guess(self.checkpoint, self._remote_options.get("unets", []), ("flux", "dev", "schnell"))
             self._select_best_guess(self.clip_l, self._remote_options.get("clips", []), ("clip_l", "clip-l", "clipl"))
             self._select_best_guess(self.clip_t5, self._remote_options.get("clip_t5", []), ("t5", "t5xxl"))
         elif family == CheckpointType.KREA2_TURBO:
+            self._select_best_guess(self.checkpoint, self._remote_options.get("unets", []), ("krea", "diffusion"))
             self._select_best_guess(
                 self.krea_clip,
                 self._remote_options.get("krea_clips", []),
                 ("krea2", "krea", "qwen"),
             )
+        elif family == CheckpointType.SDXL:
+            self._select_best_guess(self.checkpoint, self._remote_options.get("checkpoints", []), ("sdxl", "sd_xl", "xl"))
+        elif family == CheckpointType.SD15:
+            self._select_best_guess(self.checkpoint, self._remote_options.get("checkpoints", []), ("sd15", "sd-1.5", "1.5", "dreamshaper"))
+        self._select_best_guess(self.vae, self._remote_options.get("vaes", []), ("vae", "ae"))
 
     @staticmethod
     def _select_best_guess(combo: Gtk.ComboBoxText, options: list[str], hints: tuple[str, ...]) -> None:
@@ -830,7 +888,9 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
     @staticmethod
     def _add_combo(grid: Gtk.Grid, row: int, label_text: str, options: list[str], selected: str):
         label = Gtk.Label(label=label_text, xalign=0)
+        label._control_widget = label
         combo = Gtk.ComboBoxText()
+        combo._label_widget = label
         for option in options:
             combo.append_text(option)
         combo.set_active(options.index(selected) if selected in options else 0)
@@ -842,10 +902,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         if self.worker and self.worker.is_alive():
             return
         try:
+            if self._options_fetch_active:
+                raise ValueError("Wait for ComfyUI resources to finish loading")
             workflow_path = self.workflow_selector.get_active_id()
             if not workflow_path:
                 raise ValueError("Select a ComfyUI API workflow")
-            if self.mode.get_active_text() == "Inpainting" and (
+            if self._selected_mode() == "Inpainting" and (
                 self.image is None or Gimp.Selection.is_empty(self.image)
             ):
                 raise ValueError("Paint an inpainting area with GIMP's brush before generating")
@@ -863,6 +925,28 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
                 if profile.checkpoint_type == CheckpointType.KREA2_TURBO
                 else self.krea_diffusion_model.get_child().get_text() or None
             )
+            resource_values = {
+                "checkpoint": self.checkpoint.get_child().get_text() or None,
+                "vae": self.vae.get_child().get_text() or None,
+                "unet": unet,
+                "clip_l": self.clip_l.get_child().get_text() or None,
+                "clip_t5": self.clip_t5.get_child().get_text() or None,
+                "diffusion_model": diffusion_model,
+                "krea_clip": self.krea_clip.get_child().get_text() or None,
+            }
+            missing = missing_workflow_resources(workflow, resource_values)
+            if missing:
+                labels = {
+                    "checkpoint": "checkpoint",
+                    "vae": "VAE",
+                    "unet": "UNET",
+                    "clip_l": "CLIP-L",
+                    "clip_t5": "T5",
+                    "diffusion_model": "diffusion model",
+                    "krea_clip": "Krea CLIP",
+                }
+                missing_labels = ", ".join(labels[resource] for resource in missing)
+                raise ValueError(f"Select required ComfyUI resources: {missing_labels}")
             client = ComfyUIClient(self.endpoint.get_text())
             self.active_client = client
             coordinator = GenerationCoordinator(client)
@@ -871,7 +955,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             input_path = self._stage_input_image()
             mask_path = self._stage_mask_image()
             settings = {
-                "mode": self.mode.get_active_text(),
+                "mode": self._selected_mode(),
                 "prompt": self.prompt.get_text(),
                 "negative_prompt": self.negative_prompt.get_text(),
                 "checkpoint": self.checkpoint.get_child().get_text() or None,

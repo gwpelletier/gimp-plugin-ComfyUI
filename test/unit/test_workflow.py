@@ -793,3 +793,22 @@ class TestApplyMask:
             "class_type": "LoadImageMask",
             "inputs": {"image": "uploads/mask.png", "channel": "green", "upload": "image"},
         }
+
+
+class TestTextToImageWorkflows:
+    @pytest.mark.parametrize("workflow_path", [
+        "workflows/sdxl-text-to-image-api.json",
+        "workflows/sd15-text-to-image-api.json",
+        "workflows/flux-text-to-image-api.json",
+        "workflows/krea2-turbo-text-to-image-api.json",
+    ])
+    def test_text_to_image_workflow_does_not_require_an_uploaded_image(self, workflow_path):
+        # Arrange
+        workflow = load_workflow(workflow_path)
+
+        # Act
+        classes = {node["class_type"] for node in workflow.values()}
+
+        # Assert
+        assert "LoadImage" not in classes
+        assert "EmptyLatentImage" in classes or "EmptySD3LatentImage" in classes
