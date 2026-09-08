@@ -38,6 +38,9 @@ def main() -> None:
         for path in BUILD.rglob("*"):
             if path.is_file():
                 output.write(path, Path("gimp-comfyui") / path.relative_to(BUILD))
+        output.write(ROOT / "scripts" / "release_install.py", "install.py")
+        output.write(ROOT / "scripts" / "release_install.sh", "install.sh")
+        output.write(ROOT / "scripts" / "release_install.ps1", "install.ps1")
     print(f"Built {archive}")
 
 

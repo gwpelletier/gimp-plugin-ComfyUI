@@ -215,9 +215,9 @@ class ComfyUIClient:
         """Return diffusion UNET names advertised by ComfyUI."""
         return self.get_node_input_options("UNETLoader", "unet_name")
 
-    def get_available_clip_models(self) -> list[str]:
-        """Return dual-CLIP resource names advertised by ComfyUI."""
-        return self.get_node_input_options("DualCLIPLoader", "clip_name1")
+    def get_available_clip_models(self, input_name: str = "clip_name1") -> list[str]:
+        """Return the requested dual-CLIP resource names advertised by ComfyUI."""
+        return self.get_node_input_options("DualCLIPLoader", input_name)
 
     def get_available_krea_models(self) -> list[str]:
         """Return hosted Krea2 model names advertised by the custom node."""
@@ -227,6 +227,10 @@ class ComfyUIClient:
             return [item["key"] for item in options if isinstance(item, dict) and isinstance(item.get("key"), str)]
         except (KeyError, IndexError, TypeError, AttributeError):
             return []
+
+    def get_available_krea_clips(self) -> list[str]:
+        """Return CLIP resources advertised by the local Krea2 loader."""
+        return self.get_node_input_options("CLIPLoader", "clip_name")
 
     def get_available_samplers(self) -> list[str]:
         """Return sampler names advertised by the ComfyUI node schema."""

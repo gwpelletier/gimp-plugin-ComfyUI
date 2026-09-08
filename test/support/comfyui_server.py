@@ -29,6 +29,9 @@ class FakeComfyUIHandler(BaseHTTPRequestHandler):
             return {
                 "CheckpointLoaderSimple": {"input": {"required": {"ckpt_name": [["models/checkpoint.safetensors"]]}}},
                 "KSampler": {"input": {"required": {"sampler_name": [["euler"]], "scheduler": [["normal"]]}}},
+                "LoraLoader": {"input": {"required": {"lora_name": [["models/lora.safetensors"]]}}},
+                "VAELoader": {"input": {"required": {"vae_name": [["models/vae.safetensors"]]}}},
+                "UNETLoader": {"input": {"required": {"unet_name": [["models/unet.safetensors"]]}}},
             }
         return {"system": "ok"}
 

@@ -1,12 +1,16 @@
 import pytest
 
 from comfyui_plugin.resources import (
+    best_guess_option,
     CheckpointType,
     checkpoint_profile,
     filter_options,
     infer_checkpoint_type,
     validate_checkpoint_workflow,
     workflow_supports_vae,
+    workflow_matches_checkpoint_type,
+    workflow_supports_inpainting,
+    family_supports_mode,
 )
 
 
@@ -31,6 +35,18 @@ class TestFilterOptions:
         # Assert
         assert filtered == options
 
+    def test_best_guess_preserves_current_or_matches_hints(self):
+        # Arrange
+        options = ["text_encoders/t5xxl.safetensors", "text_encoders/clip_l.safetensors"]
+
+        # Act
+        current = best_guess_option(options, ("clip_l",), "text_encoders/clip_l.safetensors")
+        guessed = best_guess_option(options, ("t5",))
+
+        # Assert
+        assert current == "text_encoders/clip_l.safetensors"
+        assert guessed == "text_encoders/t5xxl.safetensors"
+
 
 class TestWorkflowSupportsVae:
     def test_detects_explicit_vae_loader(self):
@@ -54,7 +70,83 @@ class TestWorkflowSupportsVae:
         assert not supported
 
 
+class TestWorkflowSupportsInpainting:
+    def test_detects_mask_input(self):
+        # Arrange
+        workflow = {"1": {"class_type": "VAEEncodeForInpaint", "inputs": {"mask": ["2", 0]}}}
+
+        # Act
+        supported = workflow_supports_inpainting(workflow)
+
+        # Assert
+        assert supported
+
+    def test_rejects_text_to_image_workflow(self):
+        # Arrange
+        workflow = {"1": {"class_type": "Krea2ImageNode", "inputs": {"prompt": "portrait"}}}
+
+        # Act
+        supported = workflow_supports_inpainting(workflow)
+
+        # Assert
+        assert not supported
+
+
+class TestFamilySupportsMode:
+    def test_rejects_krea2_turbo_for_inpainting(self):
+        # Arrange
+        family = CheckpointType.KREA2_TURBO
+
+        # Act
+        supported = family_supports_mode(family, "Inpainting")
+
+        # Assert
+        assert not supported
+
+
 class TestCheckpointProfiles:
+    def test_infers_krea2_from_workflow_node(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {}},
+            "2": {"class_type": "CLIPLoader", "inputs": {"type": "krea2"}},
+            "3": {"class_type": "VAELoader", "inputs": {}},
+        }
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow)
+
+        # Assert
+        assert checkpoint_type == CheckpointType.KREA2_TURBO
+
+    def test_infers_sd15_from_classic_checkpoint_workflow(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {}},
+        }
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow)
+
+        # Assert
+        assert checkpoint_type == CheckpointType.SD15
+
+    def test_matches_only_selected_workflow_family(self):
+        # Arrange
+        flux_workflow = {
+            "1": {"class_type": "UNETLoader", "inputs": {}},
+            "2": {"class_type": "DualCLIPLoader", "inputs": {}},
+        }
+
+        # Act
+        matches = workflow_matches_checkpoint_type(flux_workflow, CheckpointType.FLUX)
+        misses = workflow_matches_checkpoint_type(flux_workflow, CheckpointType.SDXL)
+
+        # Assert
+        assert matches
+        assert not misses
+
     def test_workflow_structure_takes_precedence_over_checkpoint_name(self):
         # Arrange
         workflow = {
@@ -98,3 +190,143 @@ class TestCheckpointProfiles:
         # Act
         with pytest.raises(ValueError, match="UNETLoader and DualCLIPLoader"):
             validate_checkpoint_workflow(CheckpointType.FLUX, workflow)
+
+    def test_rejects_krea2_checkpoint_without_krea_node(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}}}
+
+        # Act and Assert
+        with pytest.raises(ValueError, match="Diffusion Model, Krea2 CLIP, and VAE"):
+            validate_checkpoint_workflow(CheckpointType.KREA2_TURBO, workflow)
+
+
+class TestBestGuessOption:
+    def test_returns_none_when_no_hint_matches_multiple_options(self):
+        # Arrange
+        options = ["vae/alpha.safetensors", "vae/beta.safetensors"]
+
+        # Act
+        guessed = best_guess_option(options, ("gamma",))
+
+        # Assert
+        assert guessed is None
+
+    def test_falls_back_to_single_option_when_no_hint_matches(self):
+        # Arrange
+        options = ["vae/only.safetensors"]
+
+        # Act
+        guessed = best_guess_option(options, ("unrelated",))
+
+        # Assert
+        assert guessed == "vae/only.safetensors"
+
+
+class TestInferCheckpointType:
+    def test_infers_sdxl_from_sdxl_text_encoder_node(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {}},
+            "2": {"class_type": "CLIPTextEncodeSDXL", "inputs": {}},
+        }
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow)
+
+        # Assert
+        assert checkpoint_type == CheckpointType.SDXL
+
+    def test_infers_flux_from_checkpoint_name_marker(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "models/flux1-dev.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.FLUX
+
+    def test_infers_sdxl_from_checkpoint_name_marker(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "models/sdxl_base.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.SDXL
+
+    def test_infers_sd15_from_checkpoint_name_marker(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "models/dreamshaper_8.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.SD15
+
+    def test_infers_krea2_from_checkpoint_name_marker(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "models/krea-turbo.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.KREA2_TURBO
+
+    def test_returns_custom_when_no_structure_or_name_signal(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        checkpoint_type = infer_checkpoint_type(workflow, "models/mystery.safetensors")
+
+        # Assert
+        assert checkpoint_type == CheckpointType.CUSTOM
+
+
+class TestCheckpointProfile:
+    def test_custom_inference_returns_unknown_confidence_profile(self):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        profile = checkpoint_profile(workflow, "models/mystery.safetensors")
+
+        # Assert
+        assert profile.checkpoint_type == CheckpointType.CUSTOM
+        assert profile.confidence == "unknown"
+        assert profile.source == "no reliable signal"
+
+
+class TestValidateCheckpointWorkflow:
+    def test_rejects_sdxl_checkpoint_without_sdxl_text_encoder(self):
+        # Arrange
+        workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}}}
+
+        # Act and Assert
+        with pytest.raises(ValueError, match="CLIPTextEncodeSDXL"):
+            validate_checkpoint_workflow(CheckpointType.SDXL, workflow)
+
+    def test_rejects_sd15_checkpoint_without_classic_checkpoint_loader(self):
+        # Arrange
+        workflow = {"1": {"class_type": "UNETLoader", "inputs": {}}}
+
+        # Act and Assert
+        with pytest.raises(ValueError, match="CheckpointLoaderSimple"):
+            validate_checkpoint_workflow(CheckpointType.SD15, workflow)
+
+    def test_accepts_matching_workflow_without_raising(self):
+        # Arrange
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {}},
+        }
+
+        # Act
+        result = validate_checkpoint_workflow(CheckpointType.SD15, workflow)
+
+        # Assert
+        assert result is None

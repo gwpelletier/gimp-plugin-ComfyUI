@@ -52,7 +52,33 @@ python -m pytest
 python scripts/build.py
 ```
 
-Unit tests use local fakes and do not require GIMP, GTK, a GPU, model files, or a network service. Integration tests are opt-in:
+Unit tests use local fakes and do not require GIMP, GTK, a GPU, model files, or a network service.
+
+Coverage is enforced on every `python -m pytest` run: the suite fails unless line and branch coverage of `src/` is 100%. The GIMP-bound modules (`src/gimp_comfyui.py`, `src/comfyui_plugin/gimp_image.py`, `src/comfyui_plugin/gimp_ui.py`) cannot run outside GIMP's embedded Python and are excluded from measurement; their behavior is covered by the opt-in integration flows below. When adding code to a measured module, add unit tests that keep the gate at 100%.
+
+### Mutation testing (opt-in)
+
+Coverage proves lines execute; mutation testing proves the tests actually pin the behavior. Use it after strengthening the unit suite.
+
+On Windows, run it in Docker (mutmut does not support native Windows; upstream issue [boxed/mutmut#397](https://github.com/boxed/mutmut/issues/397)):
+
+```sh
+python scripts/run_mutation.py            # mutmut run
+python scripts/run_mutation.py results    # list surviving mutants
+python scripts/run_mutation.py show 12    # inspect one mutant
+```
+
+The runner builds `scripts/mutation.Dockerfile`, mounts the repository so results persist, and forwards extra arguments to mutmut. On Linux or macOS you can instead run mutmut directly:
+
+```sh
+python -m pip install -e '.[mutation]'
+mutmut run
+mutmut results
+```
+
+`mutmut` mutates `src/comfyui_plugin/`, runs the unit suite against each mutant, and reports mutants that survived — each survivor is a place where a behavior change went unnoticed by every test, so strengthen the assertions there. The GIMP-bound modules are excluded (same reason as coverage), and mutation runs are never part of the default validation because they are much slower than the unit suite.
+
+Integration tests are opt-in:
 
 ```sh
 GIMP_BIN=/path/to/gimp \
@@ -136,7 +162,13 @@ Pull requests validate all included commits with commitlint. Merges to `main`
 are processed by Release Please, which determines the next semantic version,
 updates `src/comfyui_plugin/__init__.py`, and opens or updates a release pull
 request with the changelog. Merge that release pull request to create the GitHub
-release and version tag.
+release and version tag. The release workflow builds the versioned plug-in ZIP
+and attaches it to the GitHub release.
+
+Configure a repository secret named `RELEASE_PLEASE_TOKEN` with permission to
+write contents, issues, and pull requests. Release Please uses this token when
+available so its release pull request triggers the normal CI and commitlint
+workflows; GitHub's built-in `GITHUB_TOKEN` does not trigger new workflows.
 
 Use short-lived branches named `<type>/<short-name>`, such as
 `feature/inpainting-controls`, `fix/websocket-timeout`, or `docs/release-process`.
@@ -151,6 +183,18 @@ has a solo maintainer. Require branches to be up to date, resolve conversations,
 disable force pushes, and use squash merges with a Conventional Commit pull
 request title. Repository administrators may bypass these protections when
 necessary; other contributors may not.
+
+## Bug-fix testing
+
+For a bug reported by a user, follow red/green testing:
+
+1. Add a focused regression test that reproduces the reported failure.
+2. Run that test and verify that it fails for the expected reason.
+3. Implement the fix.
+4. Rerun the same test and the relevant broader suite until it passes.
+
+If the bug cannot be reproduced with an automated test, document why and use
+the narrowest available executable check instead.
 
 ## Change expectations
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from comfyui_plugin.export import ExportError, ImageExporter
@@ -49,3 +51,58 @@ class TestImageExporter:
         # Act
         with pytest.raises(ExportError, match="not a directory"):
             ImageExporter(output_path)
+
+    def test_export_with_index_offsets_stem_by_position(self, tmp_path):
+        # Arrange
+        exporter = ImageExporter(tmp_path)
+
+        # Act
+        exported = exporter.export(PNG, "result.png", index=2)
+
+        # Assert
+        assert exported.name == "result-3.png"
+        assert exported.read_bytes() == PNG
+
+    def test_export_wraps_write_errors_in_export_error(self, tmp_path):
+        # Arrange
+        exporter = ImageExporter(tmp_path)
+        (tmp_path / "result.png").mkdir()
+
+        # Act
+        with pytest.raises(ExportError, match="Unable to export image") as exc_info:
+            exporter.export(PNG, "result.png", overwrite=True)
+
+        # Assert
+        assert isinstance(exc_info.value.__cause__, OSError)
+
+    def test_export_rejects_riff_payload_without_webp_marker(self, tmp_path):
+        # Arrange
+        exporter = ImageExporter(tmp_path)
+        riff_without_marker = b"RIFF\x04\x00\x00\x00NOPE"
+
+        # Act / Assert
+        with pytest.raises(ExportError, match="not a valid .webp image"):
+            exporter.export(riff_without_marker, "result.webp")
+
+    def test_export_skips_occupied_collision_suffixes(self, tmp_path):
+        # Arrange
+        exporter = ImageExporter(tmp_path)
+        (tmp_path / "result.png").write_bytes(b"first")
+        (tmp_path / "result-2.png").write_bytes(b"second")
+
+        # Act
+        exported = exporter.export(PNG, "result.png")
+
+        # Assert
+        assert exported.name == "result-3.png"
+        assert exported.read_bytes() == PNG
+        assert (tmp_path / "result-2.png").read_bytes() == b"second"
+
+    def test_export_raises_export_error_when_no_filename_is_available(self, tmp_path, monkeypatch):
+        # Arrange
+        exporter = ImageExporter(tmp_path)
+        monkeypatch.setattr(Path, "exists", lambda self, **_kwargs: True)
+
+        # Act / Assert
+        with pytest.raises(ExportError, match="Unable to find an available filename"):
+            exporter.export(PNG, "result.png")

@@ -14,7 +14,7 @@ The repository contains the installable plug-in boundary, ComfyUI queue/history 
 - `test/` - unit tests and opt-in integration tests.
 - `workflows/` - ComfyUI API-format templates.
 - `TODO.md` - prioritized migration roadmap and completion criteria.
-- `scripts/build.py` - creates a versioned installable plug-in archive in `dist/`.
+- `scripts/build.py` - creates a versioned installable plug-in archive in `dist/`, bundled with a standalone `install.py`.
 
 For brush-assisted object removal, see [`docs/ai-eraser.md`](docs/ai-eraser.md). The **ComfyUI AI Eraser** procedure uses GIMP Quick Mask and the bundled inpainting workflow.
 - `scripts/install.py` - builds and installs for the current user.
@@ -37,13 +37,23 @@ python scripts/build.py
 
 ## Install in GIMP 3
 
+### From a release archive (no clone required)
+
+Download `gimp-comfyui-<version>.zip` from the [releases page](../../releases), extract it, close GIMP, then run the installer that matches your platform from inside the extracted folder:
+
+- Windows (no Python required): `powershell -ExecutionPolicy Bypass -File install.ps1`
+- Linux/macOS (no Python required): `sh install.sh`
+- Any platform with Python 3 installed: `python3 install.py`
+
+### From a repository clone
+
 Close GIMP, then run:
 
 ```sh
 python3 scripts/install.py
 ```
 
-The installer uses the standard per-user plug-in directory for the configured GIMP version (GIMP 3.2 by default):
+All installers use the standard per-user plug-in directory for the configured GIMP version (GIMP 3.2 by default):
 
 - Linux: `~/.config/GIMP/<version>/plug-ins/`
 - macOS: `~/Library/Application Support/GIMP/<version>/plug-ins/`

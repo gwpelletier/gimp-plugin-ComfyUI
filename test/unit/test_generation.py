@@ -5,7 +5,12 @@ import pytest
 
 from comfyui_plugin.client import ComfyImage, ComfyUICancelledError, ComfyUIEvent, ComfyUIEventType
 
-from comfyui_plugin.generation import GenerationCoordinator, GenerationRequest, parse_lora_settings
+from comfyui_plugin.generation import (
+    GenerationCancelledError,
+    GenerationCoordinator,
+    GenerationRequest,
+    parse_lora_settings,
+)
 
 
 class FakeClient:
@@ -180,6 +185,124 @@ class TestGenerationCoordinator:
         # Assert
         assert result.prompt_id == "job-1"
 
+    def test_reports_final_progress_after_completion(self):
+        # Arrange
+        client = FakeClient()
+        progress = []
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        result = GenerationCoordinator(client).run(
+            request, on_progress=lambda value, maximum: progress.append((value, maximum))
+        )
+
+        # Assert
+        assert result.prompt_id == "job-1"
+        assert progress == [(1, 1)]
+
+    def test_cancellation_after_polling_raises_and_clears_active_prompt(self):
+        # Arrange
+        cancellation_event = Event()
+        client = CancellingAfterPollClient(cancellation_event)
+        coordinator = GenerationCoordinator(client)
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        with pytest.raises(GenerationCancelledError, match="job-1 was cancelled"):
+            coordinator.run(request, cancellation_event=cancellation_event)
+
+        # Assert
+        assert client.queued_workflow["1"]["class_type"] == "KSampler"
+        assert coordinator.active_prompt_ids == ()
+
+    def test_discards_malformed_and_foreign_prompt_events(self):
+        # Arrange
+        client = ScriptedEventClient((
+            None,
+            "not-a-comfyui-event",
+            ComfyUIEvent(ComfyUIEventType.PROGRESS, "other-job", value=1, maximum=4),
+            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1", node_id="1"),
+        ))
+        events = []
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        result = GenerationCoordinator(client).run(request, on_event=events.append)
+
+        # Assert
+        assert result.prompt_id == "job-1"
+        assert [(event.event_type, event.prompt_id) for event in events] == [
+            (ComfyUIEventType.EXECUTED, "job-1")
+        ]
+
+    def test_delivers_event_unchanged_when_node_is_unknown(self):
+        # Arrange
+        client = ScriptedEventClient((
+            ComfyUIEvent(ComfyUIEventType.EXECUTING, "job-1", node_id="99"),
+            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1"),
+        ))
+        events = []
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        GenerationCoordinator(client).run(request, on_event=events.append)
+
+        # Assert
+        assert [(event.node_id, event.node_type) for event in events] == [("99", None), (None, None)]
+
+    def test_reports_websocket_progress_when_on_event_is_omitted(self):
+        # Arrange
+        client = ScriptedEventClient((
+            ComfyUIEvent(ComfyUIEventType.PROGRESS, "job-1", value=2, maximum=10),
+            ComfyUIEvent(ComfyUIEventType.EXECUTED, "job-1"),
+        ))
+        progress = []
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        GenerationCoordinator(client).run(
+            request, on_progress=lambda value, maximum: progress.append((value, maximum))
+        )
+
+        # Assert
+        assert progress == [(2, 10), (1, 1)]
+
+    def test_closes_websocket_when_rest_completion_finishes_first(self):
+        # Arrange
+        client = IdleWebSocketClient()
+        request = GenerationRequest(
+            workflow={"1": {"class_type": "KSampler", "inputs": {}}},
+            prompt="portrait",
+            negative_prompt="blurry",
+        )
+
+        # Act
+        result = GenerationCoordinator(client).run(request)
+
+        # Assert
+        assert result.prompt_id == "job-1"
+        assert client.websocket.closed
+
 
 class BlockingClient(FakeClient):
     def __init__(self):
@@ -236,6 +359,85 @@ class EventWebSocket:
 class BrokenWebSocketClient(FakeClient):
     def open_websocket(self, **_kwargs):
         raise OSError("WebSocket unavailable")
+
+
+class CancellingAfterPollClient(FakeClient):
+    """Cancel through the caller's event after polling completes normally."""
+
+    def __init__(self, cancellation_event):
+        super().__init__()
+        self.cancellation_event = cancellation_event
+
+    def wait_for_outputs(self, prompt_id, **kwargs):
+        self.cancellation_event.set()
+        return super().wait_for_outputs(prompt_id)
+
+
+class ScriptedWebSocket:
+    def __init__(self, events, event_seen):
+        self.events = iter(events)
+        self.event_seen = event_seen
+        self.closed = False
+
+    def connect(self):
+        pass
+
+    def receive(self):
+        event = next(self.events)
+        if isinstance(event, ComfyUIEvent) and event.event_type == ComfyUIEventType.EXECUTED:
+            self.event_seen.set()
+        return event
+
+    def close(self):
+        self.closed = True
+
+
+class ScriptedEventClient(FakeClient):
+    def __init__(self, events):
+        super().__init__()
+        self.event_seen = threading.Event()
+        self.websocket = ScriptedWebSocket(events, self.event_seen)
+
+    def open_websocket(self, **_kwargs):
+        return self.websocket
+
+    def wait_for_outputs(self, prompt_id, **kwargs):
+        assert self.event_seen.wait(timeout=1)
+        return super().wait_for_outputs(prompt_id)
+
+
+class IdleWebSocket:
+    """Block in receive() until REST polling completes so the observer outlives the run."""
+
+    def __init__(self, rest_completed):
+        self.rest_completed = rest_completed
+        self.closed = False
+
+    def connect(self):
+        pass
+
+    def receive(self):
+        self.rest_completed.wait(timeout=1)
+        return None
+
+    def close(self):
+        self.closed = True
+
+
+class IdleWebSocketClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.rest_completed = threading.Event()
+        self.websocket = IdleWebSocket(self.rest_completed)
+
+    def open_websocket(self, **_kwargs):
+        return self.websocket
+
+    def wait_for_outputs(self, prompt_id, **kwargs):
+        try:
+            return super().wait_for_outputs(prompt_id)
+        finally:
+            self.rest_completed.set()
 
 
 def _run_and_capture(coordinator, request):
@@ -299,4 +501,22 @@ class TestParseLoraSettings:
 
         # Act
         with pytest.raises(ValueError, match="Invalid LoRA strength"):
+            parse_lora_settings(value)
+
+    def test_skips_blank_entries_and_returns_remaining_loras(self):
+        # Arrange
+        value = "style.safetensors:0.75,, ,detail.safetensors"
+
+        # Act
+        loras = parse_lora_settings(value)
+
+        # Assert
+        assert loras == {"style.safetensors": 0.75, "detail.safetensors": 1.0}
+
+    def test_rejects_lora_entry_with_empty_name(self):
+        # Arrange
+        value = ":0.5"
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="LoRA name must not be empty"):
             parse_lora_settings(value)
