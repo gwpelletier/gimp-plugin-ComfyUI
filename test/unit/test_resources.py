@@ -169,6 +169,32 @@ class TestFamilySupportsMode:
 
 
 class TestCheckpointProfiles:
+    @pytest.mark.parametrize(
+        ("checkpoint_type", "steps", "cfg", "sampler", "scheduler"),
+        [
+            (CheckpointType.FLUX, 16, 1.0, "euler", "simple"),
+            (CheckpointType.SDXL, 30, 7.0, "dpmpp_2m", "karras"),
+            (CheckpointType.SD15, 20, 7.5, "dpmpp_2m", "karras"),
+            (CheckpointType.KREA2_TURBO, 8, 1.0, "euler", "normal"),
+        ],
+    )
+    def test_family_profile_uses_requested_sampling_defaults(
+        self, checkpoint_type, steps, cfg, sampler, scheduler
+    ):
+        # Arrange
+        workflow = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        # Act
+        profile = checkpoint_profile(workflow, override=checkpoint_type)
+
+        # Assert
+        assert (profile.steps, profile.cfg, profile.sampler, profile.scheduler) == (
+            steps,
+            cfg,
+            sampler,
+            scheduler,
+        )
+
     def test_infers_krea2_from_workflow_node(self):
         # Arrange
         workflow = {

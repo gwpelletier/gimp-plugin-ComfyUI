@@ -127,10 +127,10 @@ class CheckpointProfile:
 
 
 _PROFILES = {
-    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 20, 3.5, "euler", "normal", 0.75),
-    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "euler", "normal", 0.8),
-    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "euler", "normal", 0.65),
-    CheckpointType.KREA2_TURBO: CheckpointProfile(CheckpointType.KREA2_TURBO, "high", "workflow", 20, 1.0, "euler", "simple", 1.0),
+    CheckpointType.FLUX: CheckpointProfile(CheckpointType.FLUX, "high", "workflow", 16, 1.0, "euler", "simple", 0.75),
+    CheckpointType.SDXL: CheckpointProfile(CheckpointType.SDXL, "high", "workflow", 30, 7.0, "dpmpp_2m", "karras", 0.8),
+    CheckpointType.SD15: CheckpointProfile(CheckpointType.SD15, "medium", "checkpoint name", 20, 7.5, "dpmpp_2m", "karras", 0.65),
+    CheckpointType.KREA2_TURBO: CheckpointProfile(CheckpointType.KREA2_TURBO, "high", "workflow", 8, 1.0, "euler", "normal", 1.0),
     CheckpointType.CUSTOM: CheckpointProfile(CheckpointType.CUSTOM, "low", "override", 20, 8.0, "euler", "normal", 1.0),
 }
 

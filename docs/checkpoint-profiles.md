@@ -12,7 +12,14 @@ The dialog also exposes a top-level generation mode:
 
 Workflow signals have higher confidence than filenames. Flux workflows are identified by nodes such as `UNETLoader` or `DualCLIPLoader`; SDXL workflows are identified by SDXL conditioning nodes. Names containing family hints such as `flux`, `sdxl`, or `sd15` are treated as medium-confidence suggestions only.
 
-Profiles provide conservative defaults for steps, CFG, sampler, and scheduler. Defaults are applied only while those controls still contain their previous profile defaults, so changing a value manually preserves the user's choice. The selected profile is included in generation metadata and saved prompt/style settings.
+Profiles provide family-specific defaults for steps, CFG, sampler, and scheduler:
+
+- Flux: 16 steps, CFG 1.0, Euler, Simple.
+- SDXL: 30 steps, CFG 7.0, DPM++ 2M, Karras.
+- SD 1.5: 20 steps, CFG 7.5, DPM++ 2M, Karras.
+- Krea2-Turbo: 8 steps, CFG 1.0, Euler, Normal.
+
+Defaults are applied only while those controls still contain their previous profile defaults, so changing a value manually preserves the user's choice. The selected profile is included in generation metadata and saved prompt/style settings.
 
 ComfyUI's standard `/object_info` response advertises checkpoint names but does not reliably expose architecture metadata per checkpoint. The explicit override remains the authoritative escape hatch for custom or ambiguously named models.
 
