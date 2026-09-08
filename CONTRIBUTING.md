@@ -163,9 +163,10 @@ deliberately opt-in: merging to `main` does not create or prepare a release.
 When ready, manually run the `Release` workflow from the Actions tab. Release
 Please then determines the next semantic version, updates
 `src/comfyui_plugin/__init__.py`, and opens or updates a release pull request
-with the changelog. Review and merge that release pull request when ready to
-create the GitHub release and version tag. The workflow then builds the
-versioned plug-in ZIP and attaches it to the GitHub release.
+with the changelog. Review and merge that release pull request when ready. Then
+manually run the `Release` workflow on `main` again to create the GitHub release
+and version tag. The workflow builds the versioned plug-in ZIP and attaches it
+to the GitHub release.
 
 Configure a repository secret named `RELEASE_PLEASE_TOKEN` with permission to
 write contents, issues, and pull requests. Release Please uses this token when
