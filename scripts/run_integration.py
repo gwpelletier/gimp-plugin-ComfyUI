@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -20,10 +21,30 @@ def find_gimp() -> str | None:
     configured = os.environ.get("GIMP_BIN")
     if configured:
         return configured
-    for candidate in ("gimp", "gimp-console"):
+    candidates = (
+        "gimp-console",
+        "gimp-console-3.0",
+        "gimp-console-3.0.exe",
+        "gimp",
+        "gimp-3.0",
+        "gimp-3.0.exe",
+    )
+    for candidate in candidates:
         executable = shutil.which(candidate)
         if executable:
             return executable
+    if platform.system() == "Windows":
+        install_roots = {
+            Path(os.environ[variable])
+            for variable in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")
+            if os.environ.get(variable)
+        }
+        for root in install_roots:
+            for install_root in (root, root / "Programs"):
+                for executable in install_root.glob("GIMP*/bin/gimp-console*.exe"):
+                    return str(executable)
+                for executable in install_root.glob("GIMP*/bin/gimp*.exe"):
+                    return str(executable)
     return None
 
 
