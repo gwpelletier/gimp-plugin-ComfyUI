@@ -52,6 +52,8 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.cancel_requested = False
         self.completed = False
         self._remote_options: dict[str, list[str]] = {}
+        self._server_available = True
+        self._options_fetch_active = False
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -60,7 +62,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.set_border_width(12)
         content.pack_start(grid, True, True, 0)
 
-        self.endpoint = self._add_entry(grid, 0, "ComfyUI URL", "http://127.0.0.1:8188")
+        self.endpoint, self.retry_button = self._add_endpoint_row(grid, 0)
         self.mode = self._add_combo(grid, 1, "Mode", ["Image Edit", "Inpainting"], "Image Edit")
         self.mode.connect("changed", self._on_mode_changed)
         self.checkpoint, self.checkpoint_type, self.checkpoint_label = self._add_checkpoint_controls(grid, 2)
@@ -74,7 +76,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self.clip_t5 = self._add_searchable_combo(grid, 8, "Flux T5")
         self.krea_diffusion_model = self._add_searchable_combo(grid, 9, "Diffusion Model")
         self.krea_clip = self._add_searchable_combo(grid, 10, "Krea2 CLIP")
-        self.lora_selector, self.lora_strength, self.lora_rows = self._add_lora_controls(grid, 11)
+        self.lora_selector, self.lora_strength, self.lora_add_button, self.lora_rows = self._add_lora_controls(grid, 11)
         self.vae = self._add_searchable_combo(grid, 12, "VAE")
         self._update_vae_support()
         self.steps = self._add_spin(grid, 13, "Steps", 20, 1, 200, 1)
@@ -91,8 +93,11 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             ["GIMP layers", "New image", "Export directory"],
             "GIMP layers",
         )
+        self.output_mode.connect("changed", self._on_output_mode_changed)
         self.output_directory = self._add_entry(grid, 20, "Export directory", "")
+        self._on_output_mode_changed(self.output_mode)
         self.status = Gtk.Label(label="Ready", xalign=0)
+        self.status.set_line_wrap(True)
         grid.attach(self.status, 0, 21, 2, 1)
 
         action_area = self.get_action_area()
@@ -120,6 +125,34 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         delete_style_button.connect("clicked", self._delete_latest_style)
         action_area.pack_start(delete_style_button, False, False, 0)
 
+        self._server_controls = [
+            self.mode,
+            self.checkpoint,
+            self.checkpoint_type,
+            self.workflow_selector,
+            self.prompt,
+            self.negative_prompt,
+            self.unet,
+            self.clip_l,
+            self.clip_t5,
+            self.krea_diffusion_model,
+            self.krea_clip,
+            self.lora_selector,
+            self.lora_strength,
+            self.lora_add_button,
+            self.lora_rows,
+            self.vae,
+            self.steps,
+            self.cfg,
+            self.denoise,
+            self.seed,
+            self.sampler,
+            self.scheduler,
+            self.output_mode,
+            self.output_directory,
+            self.generate_button,
+        ]
+
         self.show_all()
         self.checkpoint.get_child().connect("changed", self._on_checkpoint_changed)
         self.checkpoint_type.connect("changed", self._on_checkpoint_profile_changed)
@@ -138,6 +171,24 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         grid.attach(label, 0, row, 1, 1)
         grid.attach(entry, 1, row, 1, 1)
         return entry
+
+    def _add_endpoint_row(self, grid: Gtk.Grid, row: int) -> tuple[Gtk.Entry, Gtk.Button]:
+        """Add the ComfyUI URL field with a retry button that re-checks availability."""
+        label = Gtk.Label(label="ComfyUI URL", xalign=0)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        entry = Gtk.Entry(text="http://127.0.0.1:8188")
+        entry.set_hexpand(True)
+        entry._label_widget = label
+        entry.connect("activate", self._on_retry_connection)
+        retry = Gtk.Button()
+        retry.set_image(Gtk.Image.new_from_icon_name("view-refresh", Gtk.IconSize.BUTTON))
+        retry.set_tooltip_text("Retry the connection to ComfyUI")
+        retry.connect("clicked", self._on_retry_connection)
+        box.pack_start(entry, True, True, 0)
+        box.pack_start(retry, False, False, 0)
+        grid.attach(label, 0, row, 1, 1)
+        grid.attach(box, 1, row, 1, 1)
+        return entry, retry
 
     def _add_workflow_selector(self, grid: Gtk.Grid, row: int) -> Gtk.ComboBoxText:
         """Add a registry-backed workflow selector and management controls."""
@@ -208,7 +259,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         add_button.connect("clicked", lambda _button: self._add_lora_row(selector, strength, rows))
         grid.attach(label, 0, row, 1, 1)
         grid.attach(box, 1, row, 1, 1)
-        return selector, strength, rows
+        return selector, strength, add_button, rows
 
     def _add_lora_row(self, selector: Gtk.ComboBoxText, strength: Gtk.SpinButton, rows: Gtk.Box) -> None:
         name = selector.get_child().get_text().strip()
@@ -384,6 +435,15 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._refresh_workflow_selector()
         self._apply_checkpoint_profile()
 
+    def _on_output_mode_changed(self, selector: Gtk.ComboBoxText) -> None:
+        """Show the export directory only when directory output is selected."""
+        if not hasattr(self, "output_directory"):
+            return
+        self._set_control_visibility(
+            self.output_directory,
+            selector.get_active_text() == "Export directory",
+        )
+
     def _on_workflow_changed(self, selector: Gtk.ComboBoxText) -> None:
         selected = selector.get_active_id()
         if selected:
@@ -468,7 +528,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         try:
             has_vae = workflow_supports_vae(load_workflow(selected))
             self._set_control_visibility(self.vae, has_vae)
-            self.vae.set_sensitive(has_vae)
+            self.vae.set_sensitive(has_vae and self._server_available)
         except Exception:
             self._set_control_visibility(self.vae, False)
             self.vae.set_sensitive(False)
@@ -506,6 +566,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             self.clip_t5.set_sensitive(show_flux_resources)
             self.krea_diffusion_model.set_sensitive(False)
             self.krea_clip.set_sensitive(show_krea_resource)
+            self._enforce_server_availability()
             return
         try:
             workflow = load_workflow(selected)
@@ -552,6 +613,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             else workflow_supports_vae(workflow)
         )
         self._set_control_visibility(self.vae, show_vae)
+        self._enforce_server_availability()
         return
 
     def _update_primary_model_field(self, family: CheckpointType) -> None:
@@ -629,8 +691,17 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
             self._refresh_workflow_selector()
             self.status.set_text("Workflow removed")
 
+    def _on_retry_connection(self, _widget: Gtk.Widget) -> None:
+        """Re-check ComfyUI availability using the URL currently in the entry."""
+        self.status.set_text(f"Checking ComfyUI at {self.endpoint.get_text()}...")
+        self._load_remote_options()
+
     def _load_remote_options(self) -> None:
         """Fetch model and sampler options without blocking the GTK thread."""
+        if self._options_fetch_active:
+            return
+        self._options_fetch_active = True
+        self.retry_button.set_sensitive(False)
         endpoint = self.endpoint.get_text()
         threading.Thread(target=self._fetch_remote_options, args=(endpoint,), daemon=True).start()
 
@@ -655,7 +726,11 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
 
     def _apply_remote_options(self, options: dict[str, list[str]]) -> bool:
         """Apply background ComfyUI metadata on the GTK main thread."""
+        self.retry_button.set_sensitive(True)
+        self._options_fetch_active = False
+        self._server_available = True
         self._remote_options = options
+        self._set_server_availability(True)
         self._replace_combo_options(self.unet, options["unets"])
         self._replace_combo_options(self.clip_l, options["clips"])
         self._replace_combo_options(self.clip_t5, options["clip_t5"])
@@ -668,6 +743,7 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         self._update_model_resource_support()
         self._update_family_resource_guesses()
         self._apply_checkpoint_profile()
+        self._set_status_connected()
         return False
 
     @staticmethod
@@ -681,9 +757,36 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         combo.set_active(options.index(selected) if selected in options else 0)
 
     def _show_option_error(self, message: str) -> bool:
-        """Keep local defaults when remote metadata discovery fails."""
-        self.status.set_text(f"Using defaults: {message}")
+        """Disable server-dependent controls and flag the status when ComfyUI is unreachable."""
+        self.retry_button.set_sensitive(True)
+        self._options_fetch_active = False
+        self._server_available = False
+        self._set_server_availability(False)
+        detail = GLib.markup_escape_text(message)
+        self.status.set_markup(
+            f'<span weight="bold" foreground="#c01c28">ComfyUI is unavailable: {detail}. '
+            "Check the URL or start ComfyUI, then retry.</span>"
+        )
         return False
+
+    def _set_status_connected(self) -> None:
+        self.status.set_markup('<span weight="bold" foreground="#2ec27e">Connected to ComfyUI</span>')
+
+    def _set_server_availability(self, available: bool) -> None:
+        """Toggle every control that needs ComfyUI; the URL entry and retry button stay editable."""
+        for control in self._server_controls:
+            control.set_sensitive(available)
+        if available:
+            # Re-apply workflow- and family-driven sensitivity rules so fields such as
+            # UNET stay disabled when the selected workflow does not use them.
+            self._update_vae_support()
+            self._update_model_resource_support()
+
+    def _enforce_server_availability(self) -> None:
+        """Keep server-dependent controls disabled after sensitivity recalculation while offline."""
+        if not self._server_available:
+            for control in self._server_controls:
+                control.set_sensitive(False)
 
     def _set_worker_status(self, message: str) -> None:
         """Schedule a worker status message on GTK's main thread."""
@@ -923,12 +1026,12 @@ class ComfyUIGenerationDialog(GimpUi.Dialog):
         finally:
             for output_path in output_paths:
                 output_path.unlink(missing_ok=True)
-        self.generate_button.set_sensitive(True)
+        self.generate_button.set_sensitive(self._server_available)
         return False
 
     def _show_error(self, message: str) -> bool:
         self.status.set_text(f"Error: {message}")
-        self.generate_button.set_sensitive(True)
+        self.generate_button.set_sensitive(self._server_available)
         Gimp.message(message)
         return False
 
